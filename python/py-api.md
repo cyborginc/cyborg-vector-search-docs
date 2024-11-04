@@ -17,7 +17,7 @@
 
 ## Introduction
 
-The `CyborgVectorSearch` class provides an interface to initialize, train, and query encrypted vector indexes in Cyborg Vector Search. It allows creating different vector index types (such as `ivf`, `ivfpq`, `ivfflat`), with configurable distance metrics and device options. This Python binding for `CyborgVectorSearch` uses PyBind11, ensuring efficient integration with the C++ backend.
+The `CyborgVectorSearch` class provides an interface to initialize, train, and efficiently query encrypted vector indexes in Cyborg Vector Search. It allows creating different vector index types (such as `ivf`, `ivfpq`, `ivfflat`), with configurable distance metrics and device options. This Python binding for `CyborgVectorSearch` uses PyBind11, ensuring efficient integration with the C++ backend.
 
 ### Key Features
 
@@ -31,19 +31,17 @@ The `CyborgVectorSearch` class provides an interface to initialize, train, and q
 ```python
 CyborgVectorSearch(index_location: dict,
                    config_location: dict,
-                   items_location: Optional[dict] = None,
                    device_config: Optional[dict] = None)
 ```
 
 Initializes a new `CyborgVectorSearch` instance.
 
 **Parameters**:
-| Parameter         | Type               | Description                                                         |
+| Parameter | Type | Description |
 |-------------------|--------------------|---------------------------------------------------------------------|
-| `index_location`  | [`LocationConfig (dict)`](#locationconfig)   | Configuration for index storage location. Use a dictionary with keys `location`, `table_name`, and `db_connection_string`. |
-| `config_location` | [`LocationConfig (dict)`](#locationconfig)   | Configuration for index metadata storage, similar format as `index_location`. |
-| `items_location`  | [`LocationConfig (dict)`](#locationconfig), optional | _(Optional)_ Configuration for item data storage. Defaults to `None`. |
-| `device_config`   | [`DeviceConfig (dict)`](#deviceconfig), optional | _(Optional)_ Configuration for hardware acceleration. Defaults to `None`. |
+| `index_location` | [`LocationConfig (dict)`](#locationconfig) | Configuration for index storage location. Use a dictionary with keys `location`, `table_name`, and `db_connection_string`. |
+| `config_location` | [`LocationConfig (dict)`](#locationconfig) | Configuration for index metadata storage. Uses the same dictionary structure as `index_location`. |
+| `device_config` | [`DeviceConfig (dict)`](#deviceconfig), optional | _(Optional)_ Configuration for hardware acceleration. Defaults to `None`. |
 
 **Example Usage**:
 
@@ -69,11 +67,11 @@ def create_index(self, index_name: str, index_key: bytes, index_config: dict)
 Creates a new encrypted index based on the provided configuration.
 
 **Parameters**:
-| Parameter     | Type               | Description                                                                            |
+| Parameter | Type | Description |
 |---------------|--------------------|----------------------------------------------------------------------------------------|
-| `index_name`  | `str`              | Name of the index to create. Must be unique.                                           |
-| `index_key`   | `bytes`            | 32-byte encryption key for the index.                                                  |
-| `index_config`    | [`IndexConfig (dict)`](#indexconfig)         | Configuration dictionary specifying the index type (`ivf`, `ivfpq`, or `ivfflat`) and relevant parameters such as `dimension`, `n_lists`, `pq_dim`, and `pq_bits`. |
+| `index_name` | `str` | Name of the index to create. Must be unique. |
+| `index_key` | `bytes` | 32-byte encryption key for the index, used to secure the index data. |
+| `index_config` | [`IndexConfig (dict)`](#indexconfig) | Configuration dictionary specifying the index type (`ivf`, `ivfpq`, or `ivfflat`) and relevant parameters such as `dimension`, `n_lists`, `pq_dim`, and `pq_bits`. |
 
 **Example Usage**:
 
@@ -102,10 +100,10 @@ def load_index(self, index_name: str, index_key: bytes)
 Connects to an existing encrypted index for further indexing or querying.
 
 **Parameters**:
-| Parameter    | Type    | Description                                                            |
+| Parameter | Type | Description |
 |--------------|---------|------------------------------------------------------------------------|
-| `index_name` | `str`   | Name of the index to load.                                             |
-| `index_key`  | `bytes` | 32-byte encryption key used when the index was created.                |
+| `index_name` | `str` | Name of the index to load. |
+| `index_key` | `bytes` | 32-byte encryption key; must match the key used during [`create_index()`](#create-index). |
 
 **Example Usage**:
 
@@ -122,18 +120,15 @@ search.load_index(index_name=index_name, index_key=index_key)
 ## Upsert
 
 ```python
-def upsert(self, vectors: Union[Tuple[int, List[float]], List[Tuple[int, List[float]]]])
+def upsert(self, vectors: List[Tuple[int, List[float]]])
 ```
 
-Adds or updates vector embeddings in the index.
-
-### Primary Overload: Tuple Format
-Accepts either a single tuple or a list of tuples, where each tuple represents a vector with its ID.
+Adds or updates vector embeddings in the index. Accepts a list of tuples, where each tuple represents a vector with its ID.
 
 **Parameters**:
-| Parameter | Type                              | Description                                                                                   |
+| Parameter | Type | Description |
 |-----------|-----------------------------------|-----------------------------------------------------------------------------------------------|
-| `vectors` | `Tuple[int, List[float]]` or `List[Tuple[int, List[float]]]` | A tuple or list of tuples, where each tuple has: `(id: int, vector: List[float])`. |
+| `vectors` | `List[Tuple[int, List[float]]]` | A list of tuples, where each tuple has the format `(id: int, vector: List[float])`. |
 
 - `id` (int): Unique integer identifier for the vector.
 - `vector` (List[float]): Embedding vector as a list of floats.
@@ -145,8 +140,8 @@ Accepts either a single tuple or a list of tuples, where each tuple represents a
 search = CyborgVectorSearch()
 search.load_index()
 
-# Single upsert
-search.upsert((1, [0.1, 0.2, 0.3]))
+# Single upsert (wrapped in a list)
+search.upsert([(1, [0.1, 0.2, 0.3])])
 
 # Batch upsert
 search.upsert([
@@ -156,16 +151,26 @@ search.upsert([
 ```
 
 ### Secondary Overload: NumPy Array Format
+
+> [!TIP]
+> This format is optimal for large batches due to its memory efficiency and compatibility with batch processing optimizations.
+
 ```python
-def upsert(self, vectors: np.ndarray, ids: List[int])
+def upsert(self, vectors: np.ndarray, ids: np.ndarray)
 ```
-Accepts a NumPy array for embeddings and a list of integers for IDs, suitable for large batches.
+
+Accepts two NumPy arrays:
+
+- A 2D array of floats for the vector embeddings.
+- A 1D array of integers for the unique IDs.
+
+This structure is suited for efficient handling of large batches, with type safety for IDs and embeddings.
 
 **Parameters**:
-| Parameter  | Type            | Description                                                                           |
-|------------|-----------------|---------------------------------------------------------------------------------------|
-| `vectors`  | `np.ndarray`    | 2D NumPy array of shape `(num_items, vector_dim)` representing vector embeddings.      |
-| `ids`      | `List[int]`     | List of unique integer identifiers for each vector. Length must match `vectors`.      |
+| Parameter | Type | Description |
+|------------|-----------------|--------------------------------------------------------------------------------------------------|
+| `vectors` | `np.ndarray` | 2D NumPy array of shape `(num_items, vector_dim)` with `dtype=float`, representing vector embeddings. |
+| `ids` | `np.ndarray` | 1D NumPy array of shape `(num_items,)` with `dtype=int`, containing unique integer identifiers for each vector. Length must match `vectors`. |
 
 **Example Usage**:
 
@@ -176,34 +181,41 @@ import numpy as np
 search = CyborgVectorSearch()
 search.load_index()
 
-# NumPy-based upsert
-vectors = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])  # 2 vectors of dimension 3
-ids = [101, 102]  # Unique integer IDs for each vector
+# NumPy-based upsert with two arrays
+vectors = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=float)  # 2 vectors of dimension 3
+ids = np.array([101, 102], dtype=int)  # Unique integer IDs for each vector
 
 search.upsert(vectors=vectors, ids=ids)
 ```
 
 **Exceptions**:
+
 - Raises an exception if vector dimensions are incompatible with the index configuration.
 - Raises an exception if the index has not been created or loaded.
 
 ## Train Index
 
+> [!IMPORTANT]
+> This function is only present in the [embedded library](../general/deployment-models.md) version of Cyborg Vector Search.
+> In other versions (microservice, serverless), it is automatically called once enough vector embeddings have been indexed.
+
 ```python
-def train_index(self, training_config: Optional[dict] = None)
+def train_index(self, batch_size: int = 0, max_iters: int = 0, tolerance: float = 1e-6, max_memory: int = 0)
 ```
 
 Trains the index based on the provided configuration. This step is necessary for efficient querying and should be called after enough vector embeddings have been upserted. If `train_index` is not called, queries will default to encrypted exhaustive search, which may be slower.
 
 **Parameters**:
-| Parameter          | Type     | Description                                                                                                  |
-|--------------------|----------|--------------------------------------------------------------------------------------------------------------|
-| `training_config` | [`TrainingConfig`](#trainingconfig), optional | _(Optional)_ Configuration for training parameters. This dictionary can include keys such as `batch_size`, `max_iters`, `tolerance`, and `max_memory`. |
+| Parameter | Type | Default | Description |
+|---------------|--------|---------|-------------------------------------------------------|
+| `batch_size` | `int` | `0` | Size of each batch for training. `0` auto-selects the batch size. |
+| `max_iters` | `int` | `0` | Maximum number of iterations for training. `0` auto-selects the iteration count. |
+| `tolerance` | `float`| `1e-6` | Convergence tolerance for training. |
+| `max_memory` | `int` | `0` | Maximum memory usage in MB during training. `0` imposes no limit. |
 
-- `batch_size` (int): Size of each batch for training. Defaults to `0` for auto-selection.
-- `max_iters` (int): Maximum iterations for training. Defaults to `0` for auto-selection.
-- `tolerance` (float): Convergence tolerance. Defaults to `1e-6`.
-- `max_memory` (int): Maximum memory (MB) usage during training. Defaults to `0` (no limit).
+**Exceptions**:
+
+- Raises an exception if there are not enough vector embeddings in the index to support training.
 
 **Example Usage**:
 
@@ -212,56 +224,46 @@ Trains the index based on the provided configuration. This step is necessary for
 search = CyborgVectorSearch()
 search.load_index()
 
-# Define optional training configuration
-training_config = {
-    "batch_size": 128,
-    "max_iters": 10,
-    "tolerance": 1e-4,
-    "max_memory": 1024
-}
-
-# Train the index with the configuration
-search.train_index(training_config=training_config)
+# Train the index with custom settings
+search.train_index(batch_size=128, max_iters=10, tolerance=1e-4, max_memory=1024)
 
 # Train with default settings (auto-selected configuration)
 search.train_index()
 ```
 
-**Exceptions**:
-- Raises an exception if there are not enough vector embeddings in the index to support training.
+> [!NOTE]
+> There must be at least `2 * n_lists` vector embeddings in the index prior to calling this function.
 
 ## Query
 
 ```python
-def query(self, query_vector: List[float], query_params: Optional[dict] = None) -> dict
-def query(self, query_vectors: Union[np.ndarray, List[List[float]]], query_params: Optional[dict] = None) -> dict
+def query(self, query_vector: List[float], top_k: int = 100, n_probes: int = 1, return_distances: bool = True) -> List[List[Union[int, Tuple[int, float]]]]
+def query(self, query_vectors: Union[np.ndarray, List[List[float]]], top_k: int = 100, n_probes: int = 1, return_distances: bool = True) -> List[List[Union[int, Tuple[int, float]]]]
 ```
 
 Retrieves the nearest neighbors for one or more query vectors. This method provides two overloads:
+
 - **Single query**: Accepts a single vector as a list of floats.
 - **Batch query**: Accepts multiple query vectors as a 2D NumPy array or list of lists.
 
 **Parameters**:
-| Parameter       | Type                             | Description                                                                                  |
-|-----------------|----------------------------------|----------------------------------------------------------------------------------------------|
-| `query_vector`  | `List[float]`                    | A single query vector as a list of floats (for single query).                                |
-| `query_vectors` | `np.ndarray` or `List[List[float]]` | A 2D NumPy array or list of lists, where each inner list represents a query vector (for batch query). |
-| `query_params`  | [`QueryParams (dict)`](#queryparams), optional | _(Optional)_ Parameters for querying, including `top_k` and `n_probes`. |
-
-- `top_k` (int): Number of nearest neighbors to return. Defaults to `100`.
-- `n_probes` (int): Number of lists to probe during the query. Defaults to `1`.
+| Parameter | Type | Default | Description |
+|-------------------|----------------------------------|--------------|--------------------------------------------------------------------|
+| `query_vector` | `List[float]` | - | A single query vector as a list of floats (for single query). |
+| `query_vectors` | `np.ndarray` or `List[List[float]]` | - | A 2D NumPy array or list of lists, where each inner list represents a query vector (for batch query). |
+| `top_k` | `int` | `100` | Number of nearest neighbors to return. |
+| `n_probes` | `int` | `1` | Number of lists probed during the query; higher values may increase recall but can also reduce performance. |
+| `return_distances`| `bool` | `True` | If `True`, each result includes `(ID, distance)`. If `False`, only IDs are returned. |
 
 **Returns**:
-| Return Type   | Description                                                                     |
-|---------------|---------------------------------------------------------------------------------|
-| [`QueryResults (dict)`](#queryresults) | Dictionary containing `ids` and `distances` for nearest neighbors. |
-
-- `ids`: List of lists of IDs for the nearest neighbors, corresponding to each query vector.
-- `distances`: List of lists of distances for each nearest neighbor.
+| Return Type | Description |
+|----------------------------|---------------------------------------------------------------------------------|
+| `List[List[Tuple[int, float]]]` | List of results for each query vector if `return_distances` is `True`. Each result is a list of `top_k` `(ID, distance)` tuples. |
+| `List[List[int]]` | List of results for each query vector if `return_distances` is `False`. Each result is a list of `top_k` IDs. |
 
 **Example Usage**:
 
-_Single Query_:
+_Single Query with Distances_:
 
 ```python
 # Initial configuration
@@ -270,24 +272,25 @@ search.load_index()
 
 # Define a single query vector
 query_vector = [0.1, 0.2, 0.3]  # Single query vector of dimension 3
-query_params = {"top_k": 10, "n_probes": 5}
 
-# Perform a single query
-results = search.query(query_vector=query_vector, query_params=query_params)
-
-# Access results
-print("Nearest Neighbor IDs:", results["ids"])
-print("Distances:", results["distances"])
+# Perform a single query with distances
+results = search.query(query_vector=query_vector, top_k=2, n_probes=5, return_distances=True)
+# Output example:
+# [[(101, 0.05), (102, 0.1)]]
 ```
 
-_Batch Query_:
+_Single Query without Distances_:
+
+```python
+results = search.query(query_vector=query_vector, top_k=10, n_probes=5, return_distances=False)
+# Example output:
+# [[101, 102]]
+```
+
+_Batch Query with Distances_:
 
 ```python
 import numpy as np
-
-# Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
 
 # Multiple query vectors
 query_vectors = np.array([
@@ -295,14 +298,16 @@ query_vectors = np.array([
     [0.4, 0.5, 0.6]
 ])
 
-# Query without additional parameters (using defaults)
+# Query using default parameters and distances
 results = search.query(query_vectors=query_vectors)
-
-print("Nearest Neighbor IDs:", results["ids"])
-print("Distances:", results["distances"])
+# Output example:
+# [[(101, 0.05), (102, 0.1)], [(201, 0.2), (202, 0.3)]]
 ```
 
 ## Delete Index
+
+> [!WARNING]
+> This action is irreversible and will erase all data associated with the index. Use with caution.
 
 ```python
 def delete_index(self)
@@ -321,13 +326,11 @@ search.load_index()
 search.delete_index()
 ```
 
-**Notes**:
-- Deleting an index frees up resources associated with it.
-- Ensure that the index is not in use elsewhere, as deleting it will make all operations dependent on this index invalid.
-
 Here’s the **Getter Methods** section, covering each method to retrieve information about the index state.
 
 ## Getter Methods
+
+The following methods retrieve information about the current state of the index, such as its name, type, and training status.
 
 ### is_trained
 
@@ -335,16 +338,17 @@ Here’s the **Getter Methods** section, covering each method to retrieve inform
 def is_trained(self) -> bool
 ```
 
-Checks if the index has been trained. A trained index supports efficient approximate nearest neighbor search; an untrained index will use exhaustive search instead.
+Returns `True` if the index has been trained, enabling efficient approximate nearest neighbor search. An untrained index will default to exhaustive search.
 
 **Returns**:
-| Return Type | Description                               |
+| Return Type | Description |
 |-------------|-------------------------------------------|
-| `bool`      | `True` if the index has been trained; otherwise, `False`. |
+| `bool` | `True` if the index has been trained; otherwise, `False`. |
 
 **Example Usage**:
 
 ```python
+# Check if index is trained
 if search.is_trained():
     print("The index is ready for efficient querying.")
 else:
@@ -360,13 +364,14 @@ def index_name(self) -> str
 Retrieves the name of the current index.
 
 **Returns**:
-| Return Type | Description                   |
+| Return Type | Description |
 |-------------|-------------------------------|
-| `str`       | Name of the currently loaded or created index. |
+| `str` | Name of the currently loaded or created index. |
 
 **Example Usage**:
 
 ```python
+# Retrieve the index name
 print("Current index name:", search.index_name())
 ```
 
@@ -379,13 +384,14 @@ def index_type(self) -> str
 Returns the type of the current index (e.g., `ivf`, `ivfpq`, `ivfflat`).
 
 **Returns**:
-| Return Type | Description                         |
+| Return Type | Description |
 |-------------|-------------------------------------|
-| `str`       | Type of the current index.          |
+| `str` | Type of the current index. |
 
 **Example Usage**:
 
 ```python
+# Retrieve the type of index
 print("Index type:", search.index_type())
 ```
 
@@ -398,15 +404,15 @@ def index_config(self) -> dict
 Retrieves the configuration details of the current index.
 
 **Returns**:
-| Return Type | Description                       |
+| Return Type | Description |
 |-------------|-----------------------------------|
-| `dict`      | Dictionary of index configuration parameters. |
+| `dict` | Dictionary of index configuration parameters. |
 
 **Example Usage**:
 
 ```python
-config = search.index_config()
-print("Index configuration:", config)
+# Retrieve index config
+print("Index configuration:", search.index_config())
 ```
 
 ## Types
@@ -416,6 +422,7 @@ print("Index configuration:", config)
 The `LocationConfig` dictionary specifies the storage location for the index, with options for in-memory storage, databases, or file-based storage.
 
 **Structure**:
+
 ```python
 {
     "location": str,                 # Specifies the storage type (e.g., "memory", "redis", "postgres", "mongodb").
@@ -425,10 +432,11 @@ The `LocationConfig` dictionary specifies the storage location for the index, wi
 ```
 
 The supported `location` options are:
-- `"redis"`
-- `"postgres"`
-- `"mondogdb"`
-- `"memory"` (for benchmarking and evaluation purposes)
+
+- `"redis"`: Use for high-speed, in-memory storage (recommended for `index_location`).
+- `"postgres"`: Use for reliable, SQL-based storage (recommended for `config_location`).
+- `"mongodb"`: Alternative for reliable storage.
+- `"memory"` Use for temporary in-memory storage (for benchmarking and evaluation purposes).
 
 For more info, you can read about supported backing stores [here](../general/backing-stores.md).
 
@@ -437,6 +445,7 @@ For more info, you can read about supported backing stores [here](../general/bac
 The `DeviceConfig` dictionary specifies hardware options for running vector search operations, allowing control over CPU and GPU usage.
 
 **Structure**:
+
 ```python
 {
     "cpu_threads": int,               # Number of CPU threads for computations (0 = all cores).
@@ -447,6 +456,7 @@ The `DeviceConfig` dictionary specifies hardware options for running vector sear
 ### DistanceMetric
 
 `DistanceMetric` is a string representing the distance metric used for the index. Options include:
+
 - `"cosine"`: Cosine similarity.
 - `"euclidean"`: Euclidean distance.
 - `"squared_euclidean"`: Squared Euclidean distance.
@@ -456,6 +466,15 @@ The `DeviceConfig` dictionary specifies hardware options for running vector sear
 The `IndexConfig` dictionary defines the parameters for the type of index to be created. Each index type (e.g., `ivf`, `ivfflat`, `ivfpq`) has unique configuration options:
 
 - **IVF** (Inverted File Index):
+
+Ideal for large-scale datasets where fast retrieval is prioritized over high recall:
+
+|  Speed  | Recall | Index Size |
+| :-----: | :----: | :--------: |
+| Fastest | Lowest |  Smallest  |
+
+**Example Usage**:
+
   ```python
   {
       "type": "ivf",
@@ -466,6 +485,15 @@ The `IndexConfig` dictionary defines the parameters for the type of index to be 
   ```
 
 - **IVFFlat**:
+
+Suitable for applications requiring high recall with less concern for memory usage:
+
+| Speed | Recall  | Index Size |
+| :---: | :-----: | :--------: |
+| Fast  | Highest |  Biggest   |
+
+**Example Usage**:
+
   ```python
   {
       "type": "ivfflat",
@@ -476,6 +504,15 @@ The `IndexConfig` dictionary defines the parameters for the type of index to be 
   ```
 
 - **IVFPQ** (Inverted File with Product Quantization):
+
+Product Quantization compresses embeddings, making it suitable for balancing memory use and recall:
+
+| Speed | Recall | Index Size |
+| :---: | :----: | :--------: |
+| Fast  |  High  |   Medium   |
+
+**Example Usage**:
+
   ```python
   {
       "type": "ivfpq",
@@ -486,41 +523,3 @@ The `IndexConfig` dictionary defines the parameters for the type of index to be 
       "metric": str
   }
   ```
-
-### TrainingConfig
-
-The `TrainingConfig` dictionary specifies training parameters to control convergence and memory usage.
-
-**Structure**:
-```python
-{
-    "batch_size": int,              # (Optional) Batch size for training. Defaults to 0 for auto-selection.
-    "max_iters": int,               # (Optional) Maximum iterations. Defaults to 0 for auto-selection.
-    "tolerance": float,             # (Optional) Convergence tolerance. Defaults to 1e-6.
-    "max_memory": int               # (Optional) Maximum memory (MB) usage during training. Defaults to 0 (no limit).
-}
-```
-
-### QueryParams
-
-The `QueryParams` dictionary defines parameters for querying the index, controlling the number of results and probing behavior.
-
-**Structure**:
-```python
-{
-    "top_k": int,                   # (Optional) Number of nearest neighbors to return. Defaults to 100.
-    "n_probes": int                 # (Optional) Number of lists to probe. Defaults to 1.
-}
-```
-
-### QueryResults
-
-The `QueryResults` dictionary contains the output from a `query` operation, including IDs and distances for each query’s nearest neighbors.
-
-**Structure**:
-```python
-{
-    "ids": List[List[int]],         # List of lists, where each inner list contains the IDs of nearest neighbors for a query vector.
-    "distances": List[List[float]]  # List of lists, where each inner list contains distances of nearest neighbors for a query vector.
-}
-```
