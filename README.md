@@ -30,4 +30,4 @@ To get started with Cyborg Vector Search, follow these steps:
 
 ## License
 
-All contents of this repo are the exclusive property of Cyborg Inc.
+All contents of this repo are the exclusive property of [Cyborg Inc.](https://www.cyborg.co)

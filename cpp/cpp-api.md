@@ -25,7 +25,6 @@ The `CyborgVectorSearch` class is the core interface for creating and interactin
 ```cpp
 cyborg::CyborgVectorSearch(const LocationConfig& index_location,
                    const LocationConfig& config_location,
-                   const LocationConfig& items_location = LocationConfig(),
                    const DeviceConfig& device_config = DeviceConfig());
 ```
 
@@ -36,8 +35,7 @@ Initializes a new instance of `CyborgVectorSearch`.
 |-------------------|-----------------------|------------------------------------------------------|
 | `index_location` | [`LocationConfig`](#locationconfig) | Configuration for index storage location. |
 | `config_location` | [`LocationConfig`](#locationconfig) | Configuration for index metadata storage. |
-| `items_location` | [`LocationConfig`](#locationconfig) | _(Optional)_ Configuration for item data storage. |
-| `device_config` | [`DeviceConfig`](#deviceconfig) | _(Optional)_ Configuration for hardware acceleration.|
+| `device_config` | [`DeviceConfig`](#deviceconfig) | _(Optional)_ Configuration for CPU and GPU acceleration.|
 
 **Example Usage**:
 
@@ -74,7 +72,7 @@ Creates a new index based on the provided configuration.
 | Parameter | Type | Description |
 |----------------|-------------------------------|-----------------------------------------------------|
 | `index_name` | `std::string` | Name of the index to create (must be unique). |
-| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index. |
+| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index, used to secure index data. |
 | `index_config` | [`IndexConfig`](#indexconfig) | Configuration for the index type (e.g., IVF, IVFPQ) |
 
 **Example Usage**:
@@ -102,7 +100,7 @@ Connects to an existing index for additional indexing or querying.
 | Parameter | Type | Description |
 |----------------|---------------------------|-----------------------------------------------------|
 | `index_name` | `std::string` | Name of the index to load. |
-| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index. |
+| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index; must match the key used during [`CreateIndex()`](#createindex). |
 
 **Example Usage**:
 
@@ -127,7 +125,7 @@ Ingests vector embeddings into the index.
 **Parameters**:
 | Parameter | Type | Description |
 |---------------|-----------------------------|-----------------------------------------------------|
-| `vectors` | [`Array2D<float>`](#array2d) | Vector embeddings to index. |
+| `vectors` | [`Array2D<float>`](#array2d) | 2D container with vector embeddings to index. |
 | `ids` | `std::vector<uint64_t>` | Unique identifiers for each vector. |
 
 **Exceptions**:
@@ -166,7 +164,7 @@ After, they will be conducted using encrypted ANN search.
 |----------|------------|--------------------|
 | `training_config` | [`TrainingConfig`](#trainingconfig) | _(Optional)_ Training parameters (batch size, max iterations, etc.). |
 
-**Exceptions**: Throws if there are not enough vector embeddings in the index for training.
+**Exceptions**: Throws if there are not enough vector embeddings in the index for training (must be at least `2 * n_lists`).
 
 **Example Usage**:
 
@@ -194,7 +192,7 @@ Retrieves the nearest neighbors for given query vectors.
 | Parameter | Type | Description |
 |-------------------|--------------------|-----------------------|
 | `query_vectors` | [`Array2D<float>`](#array2d) | Query vectors to search. |
-| `query_params` | [`QueryParams`](#queryparams) | _(Optional)_ Parameters for querying, including top-k results. |
+| `query_params` | [`QueryParams`](#queryparams) | _(Optional)_ Parameters for querying, such as `top_k` and `n_lists`. |
 
 
 **Returns**:
@@ -212,6 +210,8 @@ Array2D<float> query_vectors = {{0.1f, 0.2f, 0.3f}};
 QueryParams query_params(10, 5); // top-10 results, probe 5 lists
 
 QueryResults results = search.Query(query_vectors, query_params);
+
+std::cout << "ID: " << result.ids[j] << ", Distance: " << result.distances[j] << std::endl;
 ```
 
 > [!NOTE]
@@ -219,6 +219,9 @@ QueryResults results = search.Query(query_vectors, query_params);
 > This may cause queries to be slower, especially when there are many vector embeddings in the index.
 
 ## DeleteIndex
+
+> [!WARNING]
+> This action is irreversible and will erase all data associated with the index. Use with caution.
 
 ```cpp
 void DeleteIndex();
@@ -277,11 +280,12 @@ The `Location` enum contains the supported index backing store locations for Cyb
 
 ```cpp
 enum class Location {
-    kRedis,
-    kMemory,
-    kPostgres,
-    kMongoDB,
-    kNone};
+    kRedis,      // In-memory storage via Redis
+    kMemory,     // Temporary in-memory storage
+    kPostgres,   // Relational database storage
+    kMongoDB,    // Document-based NoSQL storage
+    kNone        // Undefined storage type
+};
 ```
 
 ### `LocationConfig`
@@ -336,7 +340,7 @@ enum class DistanceMetric {
 
 #### `IndexIVF`
 
-This index type does not store embeddings in the inverted index, with the following characteristics:
+Ideal for large-scale datasets where fast retrieval is prioritized over high recall:
 
 |  Speed  | Recall | Index Size |
 | :-----: | :----: | :--------: |
@@ -361,7 +365,7 @@ For guidance on how to select the right `n_lists`, refer to the [index configura
 
 #### `IndexIVFFlat`
 
-This index type stores embeddings in the index, providing the following characteristics:
+Suitable for applications requiring high recall with less concern for memory usage:
 
 | Speed | Recall  | Index Size |
 | :---: | :-----: | :--------: |
@@ -386,7 +390,7 @@ For guidance on how to select the right `n_lists`, refer to the [index configura
 
 #### `IndexIVFPQ`
 
-This index type adds Product Quantization (PQ) to compress and store embeddings in the index, yielding the following characteristics:
+Product Quantization compresses embeddings, making it suitable for balancing memory use and recall:
 
 | Speed | Recall | Index Size |
 | :---: | :----: | :--------: |
@@ -499,7 +503,7 @@ QueryParams(size_t top_k = 100,
 | `top_k` | `size_t` | _(Optional)_ Number of nearest neighbors to return. Defaults to `100`. |
 | `n_probes` | `size_t` | _(Optional)_ Number of lists to probe during query. Defaults to `1`. |
 
-For guidance on how to select the right `n_probes`, refer to the [query parameter tuning guide](../tuning-guides/query-params.md).
+Higher n_probes values may improve recall but could slow down query time, so select a value based on desired recall and performance trade-offs. For guidance on how to select the right `n_probes`, refer to the [query parameter tuning guide](../tuning-guides/query-params.md).
 
 ### `QueryResults`
 
@@ -509,7 +513,7 @@ For guidance on how to select the right `n_probes`, refer to the [query paramete
 | Method | Return Type | Description |
 |--------------------------|------------------------------|------------------------------------------------------|
 | `Result operator[](size_t query_idx)` | `Result` | Returns read-write access to IDs and distances for a specific query. |
-| `const Array2D<ItemID>& ids() const` | `const Array2D<ItemID>&` | Get read-only access to all IDs. |
+| `const Array2D<uint64_t>& ids() const` | `const Array2D<uint64_t>&` | Get read-only access to all IDs. |
 | `const Array2D<float>& distances() const` | `const Array2D<float>&` | Get read-only access to all distances. |
 | `size_t num_queries() const` | `size_t` | Returns the number of queries. |
 | `size_t top_k() const` | `size_t` | Returns the number of top-k items per query. |
