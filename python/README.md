@@ -2,7 +2,7 @@
 
 ## Introduction
 
-As of `v1.0.0`, Cyborg Vector Search is available as an [embedded library](../general/deployment-models.md) in Python and C++. This section of the docs covers the Python library.
+As of `v0.7.0`, Cyborg Vector Search is available as an [embedded library](../general/deployment-models.md) in Python and C++. This section of the docs covers the Python library.
 
 ## Further Reading
 

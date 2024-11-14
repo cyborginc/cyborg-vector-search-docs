@@ -1,5 +1,8 @@
 # Cyborg Vector Search Docs
 
+> [!IMPORTANT]  
+> These docs are still under construction as of `v0.7.0` and may change until `v1.0.0` is released.
+
 **Cyborg Vector Search** is the first Confidential Vector DB:
 
 - Introduces a novel architecture to keep confidential inference data secure through zero-trust design.
@@ -13,9 +16,9 @@
 
 To get started with Cyborg Vector Search, follow these steps:
 
-1. Request access to [cyborg-vector-search-releases](https://github.com/cyborginc/cyborg-vector-search-releases) by emailing us at [earlyaccess@cyborg.co](mailto:earlyaccess@cyborg.co?subject=Early%20Access%20Request%20-%20Cyborg%20Vector%20Search).
+1. Request access to our private `PyPI` repo by emailing us at [earlyaccess@cyborg.co](mailto:earlyaccess@cyborg.co?subject=Early%20Access%20Request%20-%20Cyborg%20Vector%20Search).
 
-2. Download the release artifacts from [cyborg-vector-search-releases](https://github.com/cyborginc/cyborg-vector-search-releases).
+2. Download the release artifacts from the private repo (`pip install cyborg_vector_search_py -i ...`).
 
 3. Review the API Docs for [Python](python/) or [C++](cpp/) to start using Cyborg Vector Search!
 

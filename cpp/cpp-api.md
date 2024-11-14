@@ -35,6 +35,7 @@ Initializes a new instance of `CyborgVectorSearch`.
 |-------------------|-----------------------|------------------------------------------------------|
 | `index_location` | [`LocationConfig`](#locationconfig) | Configuration for index storage location. |
 | `config_location` | [`LocationConfig`](#locationconfig) | Configuration for index metadata storage. |
+| `items_location` | [`LocationConfig`](#locationconfig) | Configuration intended to be used in a future release. Pass in a LocationConfig with a Location of 'None'. |
 | `device_config` | [`DeviceConfig`](#deviceconfig) | _(Optional)_ Configuration for CPU and GPU acceleration.|
 
 **Example Usage**:
@@ -42,10 +43,11 @@ Initializes a new instance of `CyborgVectorSearch`.
 ```cpp
 cyborg::LocationConfig index_location(Location::kMemory);
 cyborg::LocationConfig config_location(Location::kRedis, "index_metadata", "redis://localhost");
+cyborg::LocationConfig items_location(Location::kNone);
 cyborg::DeviceConfig device_config(4, true); // Use 4 CPU threads and enable GPU acceleration
 
 // Construct the CyborgVectorSearch object named as `search`
-cyborg::CyborgVectorSearch search(index_location, config_location, {}, device_config);
+cyborg::CyborgVectorSearch search(index_location, config_location, items_location, device_config);
 
 // Perform other operations...
 ```
@@ -80,7 +82,7 @@ Creates a new index based on the provided configuration.
 ```cpp
 cyborg::CyborgVectorSearch search(/*initial configurations*/);
 
-std::string index_name = "my_index";
+const std::string index_name = "my_index";
 std::array<uint8_t, 32> index_key = {/* 32-byte encryption key */};
 IndexIVF index_config(128, 1024); // 128-dimensions, 1024 inverted lists
 
@@ -116,7 +118,7 @@ search.LoadIndex(index_name, index_key);
 ## Upsert
 
 ```cpp
-void Upsert(const Array2D<float>& vectors,
+void Upsert(Array2D<float>& vectors,
             const std::vector<uint64_t>& ids);
 ```
 
@@ -132,6 +134,7 @@ Ingests vector embeddings into the index.
 
 - Throws if vector dimensions are incompatible with the index configuration.
 - Throws if index was not created or loaded yet.
+- Throws if there is a mismatch between the number of vectors and ids
 
 **Example Usage**:
 
@@ -182,7 +185,7 @@ search.TrainIndex(training_config);
 ## Query
 
 ```cpp
-QueryResults Query(const Array2D<float>& query_vectors,
+QueryResults Query(Array2D<float>& query_vectors,
                    const QueryParams& query_params = QueryParams());
 ```
 
@@ -283,7 +286,6 @@ enum class Location {
     kRedis,      // In-memory storage via Redis
     kMemory,     // Temporary in-memory storage
     kPostgres,   // Relational database storage
-    kMongoDB,    // Document-based NoSQL storage
     kNone        // Undefined storage type
 };
 ```
