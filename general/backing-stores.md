@@ -12,7 +12,6 @@ This allows Cyborg Vector Search to be a drop-in addition to existing stacks, wi
 
 Cyborg Vector Search currently supports the following backing stores:
 
-- MongoDB
 - PostgreSQL
 - Redis
 

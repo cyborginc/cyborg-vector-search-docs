@@ -31,29 +31,28 @@ The `CyborgVectorSearch` class provides an interface to initialize, train, and e
 ```python
 CyborgVectorSearch(index_location: dict,
                    config_location: dict,
-                   device_config: Optional[dict] = None)
+                   cpu_threads: int = 0,
+                   gpu_accelerate: bool = False)
 ```
 
 Initializes a new `CyborgVectorSearch` instance.
 
 **Parameters**:
-| Parameter | Type | Description |
-|-------------------|--------------------|---------------------------------------------------------------------|
-| `index_location` | [`LocationConfig (dict)`](#locationconfig) | Configuration for index storage location. Use a dictionary with keys `location`, `table_name`, and `db_connection_string`. |
-| `config_location` | [`LocationConfig (dict)`](#locationconfig) | Configuration for index metadata storage. Uses the same dictionary structure as `index_location`. |
-| `device_config` | [`DeviceConfig (dict)`](#deviceconfig), optional | _(Optional)_ Configuration for hardware acceleration. Defaults to `None`. |
+| Parameter | Type | Default | Description |
+|-------------------|--------------------|---------------------------------------------------------------------|---|
+| `index_location` | [`LocationConfig (dict)`](#locationconfig) | - | Configuration for index storage location. Use a dictionary with keys `location`, `table_name`, and `db_connection_string`. |
+| `config_location` | [`LocationConfig (dict)`](#locationconfig) | - | Configuration for index metadata storage. Uses the same dictionary structure as `index_location`. |
+| `cpu_threads` | `int` | `0` | _(Optional)_ Number of CPU threads to use for computations (defaults to `0` = all cores). |
+| `gpu_accelerate` | `bool` | `False` | _(Optional)_ Indicates whether to use GPU acceleration (defaults to `False`). |
 
 **Example Usage**:
 
 ```python
-index_location = {"location": "memory"}
-config_location = {"location": "redis", "table_name": "index_metadata", "db_connection_string": "redis://localhost"}
-device_config = {"cpu_threads": 4, "gpu_accelerate": True}
+index_location = LocationConfig(Location.MEMORY)
+config_location = LocationConfig(Location.REDIS, table_name="index_metadata", db_connection_string="redis://localhost")
 
 # Construct the CyborgVectorSearch object
-search = CyborgVectorSearch(index_location=index_location,
-                            config_location=config_location,
-                            device_config=device_config)
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location, cpu_threads=4, gpu_accelerate=True)
 
 # Proceed with further operations
 ```
@@ -82,11 +81,7 @@ search = CyborgVectorSearch(index_location=index_location, config_location=confi
 
 index_name = "my_index"
 index_key = secrets.token_bytes(32)  # Generate a secure 32-byte encryption key
-index_config = {
-    "type": "ivf",
-    "dimension": 128,
-    "n_lists": 1024
-}
+index_config = IndexIVF(dimension=128, n_lists=1024, metric="euclidean", store_items=False)
 
 search.create_index(index_name=index_name, index_key=index_key, index_config=index_config)
 ```
@@ -137,8 +132,8 @@ Adds or updates vector embeddings in the index. Accepts a list of tuples, where 
 
 ```python
 # Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location)
+search.load_index(index_name=index_name, index_key=index_key)
 
 # Single upsert (wrapped in a list)
 search.upsert([(1, [0.1, 0.2, 0.3])])
@@ -178,8 +173,8 @@ This structure is suited for efficient handling of large batches, with type safe
 import numpy as np
 
 # Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location)
+search.load_index(index_name=index_name, index_key=index_key)
 
 # NumPy-based upsert with two arrays
 vectors = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=float)  # 2 vectors of dimension 3
@@ -208,10 +203,10 @@ Trains the index based on the provided configuration. This step is necessary for
 **Parameters**:
 | Parameter | Type | Default | Description |
 |---------------|--------|---------|-------------------------------------------------------|
-| `batch_size` | `int` | `0` | Size of each batch for training. `0` auto-selects the batch size. |
-| `max_iters` | `int` | `0` | Maximum number of iterations for training. `0` auto-selects the iteration count. |
-| `tolerance` | `float`| `1e-6` | Convergence tolerance for training. |
-| `max_memory` | `int` | `0` | Maximum memory usage in MB during training. `0` imposes no limit. |
+| `batch_size` | `int` | `0` | _(Optional)_ Size of each batch for training. `0` auto-selects the batch size. |
+| `max_iters` | `int` | `0` | _(Optional)_ Maximum number of iterations for training. `0` auto-selects the iteration count. |
+| `tolerance` | `float`| `1e-6` | _(Optional)_ Convergence tolerance for training. |
+| `max_memory` | `int` | `0` | _(Optional)_ Maximum memory usage in MB during training. `0` imposes no limit. |
 
 **Exceptions**:
 
@@ -221,8 +216,8 @@ Trains the index based on the provided configuration. This step is necessary for
 
 ```python
 # Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location)
+search.load_index(index_name=index_name, index_key=index_key)
 
 # Train the index with custom settings
 search.train_index(batch_size=128, max_iters=10, tolerance=1e-4, max_memory=1024)
@@ -237,7 +232,7 @@ search.train_index()
 ## Query
 
 ```python
-def query(self, query_vector: List[float], top_k: int = 100, n_probes: int = 1, return_distances: bool = True) -> List[List[Union[int, Tuple[int, float]]]]
+def query(self, query_vectors: List[float], top_k: int = 100, n_probes: int = 1, return_distances: bool = True) -> List[List[Union[int, Tuple[int, float]]]]
 def query(self, query_vectors: Union[np.ndarray, List[List[float]]], top_k: int = 100, n_probes: int = 1, return_distances: bool = True) -> List[List[Union[int, Tuple[int, float]]]]
 ```
 
@@ -249,11 +244,11 @@ Retrieves the nearest neighbors for one or more query vectors. This method provi
 **Parameters**:
 | Parameter | Type | Default | Description |
 |-------------------|----------------------------------|--------------|--------------------------------------------------------------------|
-| `query_vector` | `List[float]` | - | A single query vector as a list of floats (for single query). |
+| `query_vectors` | `List[float]` | - | A single query vector as a list of floats (for single query). |
 | `query_vectors` | `np.ndarray` or `List[List[float]]` | - | A 2D NumPy array or list of lists, where each inner list represents a query vector (for batch query). |
-| `top_k` | `int` | `100` | Number of nearest neighbors to return. |
-| `n_probes` | `int` | `1` | Number of lists probed during the query; higher values may increase recall but can also reduce performance. |
-| `return_distances`| `bool` | `True` | If `True`, each result includes `(ID, distance)`. If `False`, only IDs are returned. |
+| `top_k` | `int` | `100` | _(Optional)_ Number of nearest neighbors to return. |
+| `n_probes` | `int` | `1` | _(Optional)_ Number of lists probed during the query; higher values may increase recall but can also reduce performance. |
+| `return_distances`| `bool` | `True` | _(Optional)_ If `True`, each result includes `(ID, distance)`. If `False`, only IDs are returned. |
 
 **Returns**:
 | Return Type | Description |
@@ -267,14 +262,14 @@ _Single Query with Distances_:
 
 ```python
 # Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location)
+search.load_index(index_name=index_name, index_key=index_key)
 
 # Define a single query vector
-query_vector = [0.1, 0.2, 0.3]  # Single query vector of dimension 3
+query_vectors = [0.1, 0.2, 0.3]  # Single query vector of dimension 3
 
 # Perform a single query with distances
-results = search.query(query_vector=query_vector, top_k=2, n_probes=5, return_distances=True)
+results = search.query(query_vector=query_vectors, top_k=2, n_probes=5, return_distances=True)
 # Output example:
 # [[(101, 0.05), (102, 0.1)]]
 ```
@@ -282,7 +277,7 @@ results = search.query(query_vector=query_vector, top_k=2, n_probes=5, return_di
 _Single Query without Distances_:
 
 ```python
-results = search.query(query_vector=query_vector, top_k=10, n_probes=5, return_distances=False)
+results = search.query(query_vector=query_vectors, top_k=10, n_probes=5, return_distances=False)
 # Example output:
 # [[101, 102]]
 ```
@@ -319,8 +314,8 @@ Deletes the current index and its associated data. This action is irreversible, 
 
 ```python
 # Initial configuration
-search = CyborgVectorSearch()
-search.load_index()
+search = CyborgVectorSearch(index_location=index_location, config_location=config_location)
+search.load_index(index_name=index_name, index_key=index_key)
 
 # Delete the index
 search.delete_index()
@@ -425,7 +420,7 @@ The `LocationConfig` dictionary specifies the storage location for the index, wi
 
 ```python
 {
-    "location": str,                 # Specifies the storage type (e.g., "memory", "redis", "postgres", "mongodb").
+    "location": str,                 # Specifies the storage type (e.g., "memory", "redis", "postgres").
     "table_name": Optional[str],     # (Optional) Name of the table in the database, if applicable.
     "db_connection_string": Optional[str]  # (Optional) Connection string for database access, if applicable.
 }
@@ -433,25 +428,11 @@ The `LocationConfig` dictionary specifies the storage location for the index, wi
 
 The supported `location` options are:
 
-- `"redis"`: Use for high-speed, in-memory storage (recommended for `index_location`).
-- `"postgres"`: Use for reliable, SQL-based storage (recommended for `config_location`).
-- `"mongodb"`: Alternative for reliable storage.
-- `"memory"` Use for temporary in-memory storage (for benchmarking and evaluation purposes).
+- `"REDIS"`: Use for high-speed, in-memory storage (recommended for `index_location`).
+- `"POSTGRES"`: Use for reliable, SQL-based storage (recommended for `config_location`).
+- `"MEMORY"` Use for temporary in-memory storage (for benchmarking and evaluation purposes).
 
 For more info, you can read about supported backing stores [here](../general/backing-stores.md).
-
-### DeviceConfig
-
-The `DeviceConfig` dictionary specifies hardware options for running vector search operations, allowing control over CPU and GPU usage.
-
-**Structure**:
-
-```python
-{
-    "cpu_threads": int,               # Number of CPU threads for computations (0 = all cores).
-    "gpu_accelerate": bool            # Enables GPU acceleration if available (True/False).
-}
-```
 
 ### DistanceMetric
 
@@ -476,12 +457,7 @@ Ideal for large-scale datasets where fast retrieval is prioritized over high rec
 **Example Usage**:
 
   ```python
-  {
-      "type": "ivf",
-      "dimension": int,       # Number of dimensions in each vector.
-      "n_lists": int,         # Number of inverted index lists.
-      "metric": str           # Distance metric ("cosine", "euclidean", or "squared_euclidean").
-  }
+  index_config = IndexIVF(dimension=128, n_lists=1024, metric="euclidean", store_items=False)
   ```
 
 - **IVFFlat**:
@@ -495,12 +471,7 @@ Suitable for applications requiring high recall with less concern for memory usa
 **Example Usage**:
 
   ```python
-  {
-      "type": "ivfflat",
-      "dimension": int,
-      "n_lists": int,
-      "metric": str
-  }
+  index_config = IndexIVFFlat(dimension=128, n_lists=1024, metric="euclidean", store_items=False)
   ```
 
 - **IVFPQ** (Inverted File with Product Quantization):
@@ -514,12 +485,5 @@ Product Quantization compresses embeddings, making it suitable for balancing mem
 **Example Usage**:
 
   ```python
-  {
-      "type": "ivfpq",
-      "dimension": int,
-      "n_lists": int,
-      "pq_dim": int,          # Dimensionality after product quantization.
-      "pq_bits": int,         # Number of bits per dimension (1-16).
-      "metric": str
-  }
+  index_config = IndexIVFPQ(dimension=128, n_lists=1024, pq_dim=64, pq_bits=8, metric="euclidean", store_items=False)
   ```
