@@ -3,14 +3,17 @@
 ## Contents
 
 - [Introduction](#introduction)
-- [Constructor](#constructor)
-- [Destructor](#destructor)
-- [CreateIndex](#createindex)
-- [LoadIndex](#loadindex)
-- [Upsert](#upsert)
-- [TrainIndex](#trainindex)
-- [Query](#query)
-- [DeleteIndex](#deleteindex)
+- [`Client`](#client)
+  - [Constructor](#constructor)
+  - [Create Index](#create-index)
+  - [Load Index](#load-index)
+  - [List Indexes](#list-indexes)
+- [`EncryptedIndex`](#encryptedindex)
+  - [Upsert](#upsert)
+  - [Train](#train)
+  - [Query](#query)
+  - [Get Items](#get-items)
+  - [Delete Index](#delete-index)
 - [Getter Methods](#getter-methods)
 - [Types](#types)
 
@@ -18,17 +21,29 @@
 
 ## Introduction
 
-The `CyborgVectorSearch` class is the core interface for creating and interacting with an encrypted index in Cyborg Vector Search. This class provides methods for initializing, training, and querying encrypted indexes. It supports various vector index types (e.g., IVF, IVFPQ, IVFFLAT) and can be configured with specific distance metrics and device options.
+The C++ API for Cyborg Vector Search is split into two main classes within the `cyborg` namespace:
 
-## Constructor
+- **`Client`** – Handles configuration, index creation/loading, and listing available indexes.
+- **`EncryptedIndex`** – Provides data operations on a specific encrypted index such as upserting vectors, training the index, querying, and retrieving stored items.
+
+This API is also exposed via PyBind11 in the [Python API](../python/py-api.md).
+
+---
+
+## `Client`
+
+The `cyborg::Client` class manages storage configurations and acts as a factory for creating or loading encrypted indexes.
+
+### Constructor
 
 ```cpp
-cyborg::CyborgVectorSearch(const LocationConfig& index_location,
-                   const LocationConfig& config_location,
-                   const DeviceConfig& device_config = DeviceConfig());
+cyborg::Client(const LocationConfig& index_location,
+               const LocationConfig& config_location,
+               const LocationConfig& items_location,
+               const int cpu_threads,
+               const bool gpu_accelerate);
 ```
-
-Initializes a new instance of `CyborgVectorSearch`.
+Initializes a new instance of `Client`.
 
 **Parameters**:
 | Parameter | Type | Description |
@@ -36,131 +51,176 @@ Initializes a new instance of `CyborgVectorSearch`.
 | `index_location` | [`LocationConfig`](#locationconfig) | Configuration for index storage location. |
 | `config_location` | [`LocationConfig`](#locationconfig) | Configuration for index metadata storage. |
 | `items_location` | [`LocationConfig`](#locationconfig) | Configuration intended to be used in a future release. Pass in a LocationConfig with a Location of 'None'. |
-| `device_config` | [`DeviceConfig`](#deviceconfig) | _(Optional)_ Configuration for CPU and GPU acceleration.|
+| `cpu_threads` | `int` | Number of CPU threads to use (e.g., `0` to use all available cores).|
+| `gpu_accelerate` | `bool` | Whether to enable GPU acceleration (requires CUDA).|
 
 **Example Usage**:
 
 ```cpp
+#include "client.hpp"
+
 cyborg::LocationConfig index_location(Location::kMemory);
 cyborg::LocationConfig config_location(Location::kRedis, "index_metadata", "redis://localhost");
-cyborg::LocationConfig items_location(Location::kNone);
-cyborg::DeviceConfig device_config(4, true); // Use 4 CPU threads and enable GPU acceleration
+cyborg::LocationConfig items_location(Location::kNone); // No item storage
+int cpu_threads = 4;
+bool use_gpu = true;
 
-// Construct the CyborgVectorSearch object named as `search`
-cyborg::CyborgVectorSearch search(index_location, config_location, items_location, device_config);
-
-// Perform other operations...
+cyborg::Client client(index_loc, config_loc, items_loc, cpu_threads, use_gpu);
 ```
 
-## Destructor
+---
+
+### Create Index
+
+Creates and returns a new encrypted index based on the provided configuration.
 
 ```cpp
-~cyborg::CyborgVectorSearch();
+std::unique_ptr<cyborg::EncryptedIndex> CreateIndex(const std::string index_name,
+                                                    const std::array<uint8_t, 32>& index_key,
+                                                    const IndexConfig& index_config,
+                                                    const std::optional<size_t>& max_cache_size);
 ```
-
-Destructs the `CyborgVectorSearch` object, releasing any allocated resources.
-
-## CreateIndex
-
-```cpp
-void CreateIndex(const std::string index_name,
-                 const std::array<uint8_t, 32>& index_key,
-                 IndexConfig& index_config);
-```
-
-Creates a new index based on the provided configuration.
 
 **Parameters**:
 | Parameter | Type | Description |
 |----------------|-------------------------------|-----------------------------------------------------|
 | `index_name` | `std::string` | Name of the index to create (must be unique). |
 | `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index, used to secure index data. |
-| `index_config` | [`IndexConfig`](#indexconfig) | Configuration for the index type (e.g., IVF, IVFPQ) |
+| `index_config` | [`IndexConfig`](#indexconfig) | Configuration for the index type (e.g., IVFFlat, IVFPQ). |
+| `max_cache_size` | `size_t` | _(Optional)_ Maximum size for the local cache (default is `0`). |
 
 **Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
+#include "client.hpp"
+#include "encrypted_index.hpp"
+#include <array>
+#include <memory>
+#include <optional>
+#include <string>
 
-const std::string index_name = "my_index";
-std::array<uint8_t, 32> index_key = {/* 32-byte encryption key */};
-IndexIVF index_config(128, 1024); // 128-dimensions, 1024 inverted lists
+// Create a secure 32-byte key (example: all zeros)
+std::array<uint8_t, 32> index_key = {0};
 
-search.CreateIndex(index_name, index_key, index_config);
+// Example vector dimensionality & number of lists
+const size_t vector_dim = 1024;
+const size_t num_lists = 128;
+
+// Create an index configuration (e.g., using an IVFFlat configuration)
+IndexIVFFlat index_config(vector_dim, num_lists, DistanceMetric::euclidean);
+
+auto index = client.CreateIndex("my_index", index_key, index_config);
 ```
 
-## LoadIndex
+---
+
+### Load Index
+
+Loads an existing encrypted index and returns an instance of `EncryptedIndex`.
 
 ```cpp
-void LoadIndex(const std::string index_name,
-               const std::array<uint8_t, 32>& index_key);
+std::unique_ptr<cyborg::EncryptedIndex> LoadIndex(const std::string index_name,
+                                                  const std::array<uint8_t, 32>& index_key,
+                                                  const std::optional<size_t>& max_cache_size);
 ```
-
-Connects to an existing index for additional indexing or querying.
 
 **Parameters**:
 | Parameter | Type | Description |
-|----------------|---------------------------|-----------------------------------------------------|
-| `index_name` | `std::string` | Name of the index to load. |
-| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index; must match the key used during [`CreateIndex()`](#createindex). |
+|----------------|-------------------------------|-----------------------------------------------------|
+| `index_name` | `std::string` | Name of the index to create (must be unique). |
+| `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index, used to secure index data. |
+| `max_cache_size` | `size_t` | _(Optional)_ Maximum size for the local cache (default is `0`). |
+
 
 **Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
-
-std::string index_name = "my_index";
-std::array<uint8_t, 32> index_key = {/* 32-byte encryption key */};
-
-search.LoadIndex(index_name, index_key);
+auto index = client.LoadIndex("my_index", index_key, std::optional<size_t>{});
 ```
 
-## Upsert
+---
+
+### List Indexes
+
+Returns a list of all encrypted index names accessible via the client at the set `LocationConfig`.
+
+```cpp
+std::vector<std::string> ListIndexes();
+```
+
+**Example Usage**:
+
+```cpp
+auto indexes = client.ListIndexes();
+for (const auto& name : indexes) {
+    std::cout << name << std::endl;
+}
+```
+
+---
+
+## `EncryptedIndex`
+
+The `cyborg::EncryptedIndex` class contains all data operations for a specific encrypted index.
+
+### Upsert
+
+Adds or updates vector embeddings in the index.
 
 ```cpp
 void Upsert(Array2D<float>& vectors,
-            const std::vector<uint64_t>& ids);
+            const std::vector<uint64_t> ids,
+            const std::vector<std::vector<uint8_t>> items = {});
 ```
-
-Ingests vector embeddings into the index.
 
 **Parameters**:
 | Parameter | Type | Description |
 |---------------|-----------------------------|-----------------------------------------------------|
 | `vectors` | [`Array2D<float>`](#array2d) | 2D container with vector embeddings to index. |
 | `ids` | `std::vector<uint64_t>` | Unique identifiers for each vector. |
+| `items` | `std::vector<std::vector<uint8_t>>` | _(Optional)_ Item contents in bytes. |
 
 **Exceptions**:
 
 - Throws if vector dimensions are incompatible with the index configuration.
 - Throws if index was not created or loaded yet.
-- Throws if there is a mismatch between the number of vectors and ids
+- Throws if there is a mismatch between the number of `vectors`, `ids` or `items`
 
 **Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
-search.LoadIndex(/*initial configurations*/);
+#include "encrypted_index.hpp"
 
-Array2D<float> vectors = {{0.1f, 0.2f, 0.3f}, {0.4f, 0.5f, 0.6f}}; // 2 vectors of dimension 3
-std::vector<uint64_t> ids = {101, 102};
+// Assume Array2D<float> is properly defined and populated.
+cyborg::Array2D<float> embeddings{/*...*/};
+std::vector<uint64_t> ids = {1, 2, 3};
 
-search.Upsert(vectors, ids);
+// Upsert without additional item data
+index->Upsert(embeddings, ids);
+
+// Upsert with associated items
+std::vector<std::vector<uint8_t>> items = {
+    {'a', 'b', 'c'}, {'d', 'e', 'f'}, {'g', 'h', 'i'}
+};
+index->Upsert(embeddings, ids, items);
 ```
 
-## TrainIndex
+---
+
+### Train
+
+Builds the index using the specified training configuration. Required before efficient querying.
+Prior to calling this, all queries will be conducted using encrypted exhaustive search.
+After, they will be conducted using encrypted ANN search.
 
 > [!IMPORTANT]
 > This function is only present in the [embedded library](../../guides/0.overview/0.1.deployment-models.md) version of Cyborg Vector Search.
 > In other versions (microservice, serverless), it is automatically called once enough vector embeddings have been indexed.
 
+
 ```cpp
 void TrainIndex(const TrainingConfig& training_config = TrainingConfig());
 ```
-
-Builds the index using the specified training configuration. Required before efficient querying.
-Prior to calling this, all queries will be conducted using encrypted exhaustive search.
-After, they will be conducted using encrypted ANN search.
 
 **Parameters**:
 | Parameter | Type | Description |
@@ -172,23 +232,23 @@ After, they will be conducted using encrypted ANN search.
 **Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
-search.LoadIndex(/*initial configurations*/);
-
-cyborg::TrainingConfig training_config(128, 10, 1e-4, 1024); // batch size, max iters, tolerance, max memory (MB)
-search.TrainIndex(training_config);
+cyborg::TrainingConfig config(128, 10, 1e-4, 1024);
+index->TrainIndex(config);
 ```
 
 > [!NOTE]
 > There must be at least `2 * n_lists` vector embeddings in the index prior to to calling this function.
 
-## Query
+---
+
+### Query
+
+Retrieves the nearest neighbors for given query vectors.
 
 ```cpp
 QueryResults Query(Array2D<float>& query_vectors,
                    const QueryParams& query_params = QueryParams());
 ```
-
 Retrieves the nearest neighbors for given query vectors.
 
 **Parameters**:
@@ -196,7 +256,6 @@ Retrieves the nearest neighbors for given query vectors.
 |-------------------|--------------------|-----------------------|
 | `query_vectors` | [`Array2D<float>`](#array2d) | Query vectors to search. |
 | `query_params` | [`QueryParams`](#queryparams) | _(Optional)_ Parameters for querying, such as `top_k` and `n_lists`. |
-
 
 **Returns**:
 | Type | Description |
@@ -206,25 +265,50 @@ Retrieves the nearest neighbors for given query vectors.
 **Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
-search.LoadIndex(/*initial configurations*/);
+cyborg::Array2D<float> queries{/*...*/}; // Populate with one or more query vectors
+cyborg::QueryParams params(10, 5);  // top_k = 10, n_probes = 5
 
-Array2D<float> query_vectors = {{0.1f, 0.2f, 0.3f}};
-QueryParams query_params(10, 5); // top-10 results, probe 5 lists
-
-QueryResults results = search.Query(query_vectors, query_params);
-
+QueryResults results = index->Query(queries, params);
 std::cout << "ID: " << result.ids[j] << ", Distance: " << result.distances[j] << std::endl;
+// Process query results...
 ```
 
 > [!NOTE]
 > If this function is called on an index where `TrainIndex()` has not been executed, the query will use encrypted exhaustive search.
 > This may cause queries to be slower, especially when there are many vector embeddings in the index.
 
-## DeleteIndex
+---
 
-> [!WARNING]
-> This action is irreversible and will erase all data associated with the index. Use with caution.
+### Get Items
+
+Retrieves and decrypts items associated with the specified IDs. (For a single item, pass a `std::vector` with one element.)
+
+```cpp
+std::vector<std::vector<uint8_t>> GetItems(std::vector<uint64_t> ids);
+```
+
+**Parameters**:
+| Parameter | Type | Description |
+|-------------------|--------------------|-----------------------|
+| `ids` | `std::vector<uint64_t>` | IDs to retrieve. |
+
+**Example Usage**:
+
+```cpp
+std::vector<uint64_t> item_ids = {1, 2, 3};
+auto items = index->GetItems(item_ids);
+
+for (const auto& item : items) {
+    // Process each decrypted item (as a vector of bytes)
+}
+```
+
+---
+
+### Delete Index
+
+Deletes the current index and all its associated data.  
+**Warning**: This action is irreversible.
 
 ```cpp
 void DeleteIndex();
@@ -232,16 +316,17 @@ void DeleteIndex();
 
 Deletes the index and its associated data. Proceed with caution.
 
-- **Example Usage**:
+**Example Usage**:
 
 ```cpp
-cyborg::CyborgVectorSearch search(/*initial configurations*/);
-search.LoadIndex(/*initial configurations*/);
-
-search.DeleteIndex();
+index->DeleteIndex();
 ```
 
+---
+
 ## Getter Methods
+
+The following methods provide information about the current state of the encrypted index:
 
 ### is_trained
 
@@ -251,13 +336,17 @@ bool is_trained() const;
 
 Returns whether the index has been trained.
 
+---
+
 ### index_name
 
 ```cpp
 std::string index_name() const;
 ```
 
-Returns the name of the current index.
+Returns the name of the index.
+
+---
 
 ### index_type
 
@@ -265,7 +354,9 @@ Returns the name of the current index.
 IndexType index_type() const;
 ```
 
-Returns the type of the current index.
+Returns the type of the index (for example, IVF, IVFPQ, or IVFFlat).
+
+---
 
 ### index_config
 
@@ -273,7 +364,17 @@ Returns the type of the current index.
 IndexConfig* index_config() const;
 ```
 
-Returns a pointer to the current index configuration.
+Returns a pointer to the index configuration.
+
+**Example Usage**:
+
+```cpp
+if (index->is_trained()) {
+    std::cout << "Index " << index->index_name() << " is trained." << std::endl;
+}
+```
+
+---
 
 ## Types
 
@@ -290,9 +391,12 @@ enum class Location {
 };
 ```
 
-### `LocationConfig`
+---
 
-The `LocationConfig` class configures storage locations for the index, including options for in-memory storage, databases, or file-based storage.
+### `LocationConfig`
+_(Equivalent to the Python `DBConfig`)_  
+
+`LocationConfig` defines the storage location for various index components.**Constructor**:
 
 **Constructor**:
 
@@ -309,21 +413,16 @@ LocationConfig(Location location,
 | `table_name` | `std::string` | _(Optional)_ Name of the table in the database, if applicable. |
 | `db_connection_string` | `std::string` | _(Optional)_ Connection string for database access, if applicable. |
 
-### `DeviceConfig`
 
-The `DeviceConfig` class configures hardware usage for vector search operations, specifying CPU and GPU resources.
-
-**Constructor**:
+**Example Usage**:
 
 ```cpp
-explicit DeviceConfig(int cpu_threads = 0, bool gpu_accelerate = false);
+cyborg::LocationConfig index_loc(Location::kRedis, std::nullopt, "redis://localhost");
+cyborg::LocationConfig config_loc(Location::kRedis, std::nullopt, "redis://localhost");
+cyborg::LocationConfig items_loc(Location::kPostgres, "items", "host=localhost dbname=postgres");
 ```
 
-**Parameters**:
-| Parameter | Type | Description |
-|-------------------|---------|---------------------------------|
-| `cpu_threads` | `int` | Number of CPU threads to use for computations (defaults to `0` = all cores).|
-| `gpu_accelerate` | `bool` | Indicates whether to use GPU acceleration (defaults to `false`). |
+---
 
 ### `DistanceMetric`
 
@@ -335,6 +434,9 @@ enum class DistanceMetric {
     Euclidean,
     SquaredEuclidean};
 ```
+
+---
+
 
 ### `IndexConfig`
 
@@ -352,8 +454,8 @@ Ideal for large-scale datasets where fast retrieval is prioritized over high rec
 
 ```cpp
 IndexIVF(size_t dimension,
-            size_t n_lists,
-            DistanceMetric metric = DistanceMetric::Euclidean);
+         size_t n_lists,
+         DistanceMetric metric = DistanceMetric::Euclidean);
 ```
 
 **Parameters**:
@@ -377,8 +479,8 @@ Suitable for applications requiring high recall with less concern for memory usa
 
 ```cpp
 IndexIVFFlat(size_t dimension,
-                size_t n_lists,
-                DistanceMetric metric = DistanceMetric::Euclidean);
+             size_t n_lists,
+             DistanceMetric metric = DistanceMetric::Euclidean);
 ```
 
 **Parameters**:
@@ -402,10 +504,10 @@ Product Quantization compresses embeddings, making it suitable for balancing mem
 
 ```cpp
 IndexIVFPQ(size_t dimension,
-            size_t n_lists,
-            size_t pq_dim,
-            size_t pq_bits,
-            DistanceMetric metric = DistanceMetric::Euclidean);
+           size_t n_lists,
+           size_t pq_dim,
+           size_t pq_bits,
+           DistanceMetric metric = DistanceMetric::Euclidean);
 ```
 
 **Parameters**:
@@ -418,6 +520,8 @@ IndexIVFPQ(size_t dimension,
 | `metric` | [`DistanceMetric`](#distancemetric) | _(Optional)_ Distance metric to use for index build and queries. |
 
 For guidance on how to select the right `n_lists`, `pq_dim` and `pq_bits`, refer to the [index configuration tuning guide](../tuning-guides/index-configs.md).
+
+---
 
 ### Array2D
 
@@ -467,6 +571,8 @@ for (size_t i = 0; i < array.rows(); ++i) {
 }
 ```
 
+---
+
 ### `TrainingConfig`
 
 The `TrainingConfig` struct defines parameters for training an index, allowing control over convergence and memory usage.
@@ -504,8 +610,13 @@ QueryParams(size_t top_k = 100,
 |-------------------|----------|--------------------------------------------------------------------------|
 | `top_k` | `size_t` | _(Optional)_ Number of nearest neighbors to return. Defaults to `100`. |
 | `n_probes` | `size_t` | _(Optional)_ Number of lists to probe during query. Defaults to `1`. |
+| `return_items` | `bool` | _(Optional)_ Whether to return item contents along with the IDs. Defaults to `false`. |
+| `return_metadata` | `bool` | _(Optional)_ Whether to return metadata along with the IDs. Defaults to `false`. |
+| `greedy` | `bool` | _(Optional)_ Whether to perform greedy search. Defaults to `false`. |
 
 Higher n_probes values may improve recall but could slow down query time, so select a value based on desired recall and performance trade-offs. For guidance on how to select the right `n_probes`, refer to the [query parameter tuning guide](../tuning-guides/query-params.md).
+
+---
 
 ### `QueryResults`
 
