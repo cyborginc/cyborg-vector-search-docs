@@ -1,9 +1,9 @@
-# Cyborg Vector Search Docs
+# CyborgDB Docs
 
 > [!IMPORTANT]  
-> These docs are still under construction as of `v0.8.0` and may change until `v1.0.0` is released.
+> These docs are still under construction as of `v0.9.0` and may change until `v1.0.0` is released.
 
-**Cyborg Vector Search** is the first Confidential Vector DB:
+**CyborgDB** is the first Confidential Vector DB:
 
 - Introduces a novel architecture to keep confidential inference data secure through zero-trust design.
 - Keeps vector embeddings end-to-end encrypted throughout their lifecycle (including at search time).
@@ -11,21 +11,21 @@
 - Provides high-performance indexing and retrieval which can be [GPU-accelerated with CUDA](https://developer.nvidia.com/blog/bringing-confidentiality-to-vector-search-with-cyborg-and-nvidia-cuvs/).
 - Works with many backend DBs such as Postgres and Redis, integrating easily into your existing infrastructure.
 
-[Learn more about Cyborg Vector Search >](guides/0.overview/0.0.overview.md)
+[Learn more about CyborgDB >](guides/0.overview/0.0.overview.md)
 
 ## Getting Started
 
-To get started with Cyborg Vector Search, follow these steps:
+To get started with CyborgDB, follow these steps:
 
 1. Request access to our private `PyPI` repo by emailing us at [earlyaccess@cyborg.co](mailto:earlyaccess@cyborg.co?subject=Early%20Access%20Request%20-%20Cyborg%20Vector%20Search).
 
-2. Download the release artifacts from the private repo (`pip install cyborg_vector_search_py -i <private_repo>`).
+2. Download the release artifacts from the private repo (`pip install cyborgdb -i <private_repo>`).
 
-3. Get started with our [Quickstart Guide](guides/1.getting-started/1.0.quickstart.md) or review the API Docs for [Python](reference/python/) or [C++](reference/cpp/) to start using Cyborg Vector Search!
+3. Get started with our [Quickstart Guide](guides/1.getting-started/1.0.quickstart.md) or review the API Docs for [Python](reference/python/) or [C++](reference/cpp/) to start using CyborgDB!
 
 ## Further Reading
 
-- [Intro to Cyborg Vector Search >](guides/0.overview/0.0.overview.md)
+- [Intro to CyborgDB >](guides/0.overview/0.0.overview.md)
 - [Guides >](guides/)
 - [Python API >](reference/python/py-api.md)
 - [Python Examples >](examples/python/)

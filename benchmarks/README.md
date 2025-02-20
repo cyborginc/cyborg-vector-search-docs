@@ -1,4 +1,4 @@
-# Cyborg Vector Search - Performance Benchmarks
+# CyborgDB - Performance Benchmarks
 
 _Coming soon_
 

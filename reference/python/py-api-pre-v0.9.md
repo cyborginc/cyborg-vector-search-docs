@@ -1,4 +1,4 @@
-# CyborgDB - Python API
+# Cyborg Vector Search - Python API
 
 ## Contents
 
@@ -12,8 +12,8 @@
   - [Upsert](#upsert)
   - [Train](#train)
   - [Query](#query)
-  - [Get](#get)
-  - [Delete](#delete)
+  - [Get Item](#get-item)
+  - [Get Items](#get-items)
   - [Delete Index](#delete-index)
 - [Getter Methods](#getter-methods)
 - [Types](#types)
@@ -25,7 +25,7 @@
 
 ## Introduction
 
-The `CyborgDB` classes (`Client` and `EncryptedIndex`) provides an interface to initialize, train, and efficiently query encrypted vector indexes in CyborgDB. It allows creating different vector index types (such as `ivf`, `ivfpq`, `ivfflat`), with configurable distance metrics and device options. This Python binding for `CyborgDB` uses PyBind11, ensuring efficient integration with the C++ backend.
+The `CyborgVectorSearch` classes (`Client` and `EncryptedIndex`) provides an interface to initialize, train, and efficiently query encrypted vector indexes in Cyborg Vector Search. It allows creating different vector index types (such as `ivf`, `ivfpq`, `ivfflat`), with configurable distance metrics and device options. This Python binding for `CyborgVectorSearch` uses PyBind11, ensuring efficient integration with the C++ backend.
 
 ### Key Features
 
@@ -38,9 +38,9 @@ The `CyborgDB` classes (`Client` and `EncryptedIndex`) provides an interface to 
 
 ## `Client`
 
-`Client` is the main class exposed by `cyborgdb`. It exposes the functionality necessary to create, load, list and delete indexes. Operations within encrypted indexes (such as `upsert` and `query`) are contained within the `EncryptedIndex` class returned by `create_index` and `load_index`.
+`Client` is the main class exposed by `cyborg_vector_search_py`. It exposes the functionality necessary to create, load, list and delete indexes. Operations within encrypted indexes (such as `upsert` and `query`) are contained within the `EncryptedIndex` class returned by `create_index` and `load_index`.
 
-### Constructor
+## Constructor
 
 ```python
 Client(index_location: DBConfig,
@@ -50,7 +50,7 @@ Client(index_location: DBConfig,
        gpu_accelerate: bool = False)
 ```
 
-Initializes a new CyborgDB `Client` instance.
+Initializes a new Cyborg Vector Search `Client` instance.
 
 **Parameters**:
 | Parameter | Type | Default | Description |
@@ -64,14 +64,14 @@ Initializes a new CyborgDB `Client` instance.
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-config_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-items_location = cyborgdb.DBConfig(location='postgres', table_name="items", connection_string="host=localhost dbname=postgres")
+index_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+config_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+items_location = cvs.DBConfig(location='postgres', table_name="items", connection_string="host=localhost dbname=postgres")
 
 # Construct the Client object
-client = cyborgdb.Client(index_location=index_location,
+client = cvs.Client(index_location=index_location,
                     config_location=config_location,
                     items_location=items_location,
                     cpu_threads=4,
@@ -80,16 +80,13 @@ client = cyborgdb.Client(index_location=index_location,
 # Proceed with further operations
 ```
 
----
-
-### Create Index
+## Create Index
 
 ```python
 def create_index(self,
                  index_name: str,
                  index_key: bytes,
                  index_config: IndexConfig,
-                 embedding_model: str = None,
                  max_cache_size: int = 0)
 ```
 
@@ -101,31 +98,28 @@ Creates and returns a new encrypted index based on the provided configuration.
 | `index_name` | `str` | Name of the index to create. Must be unique. |
 | `index_key` | `bytes` | 32-byte encryption key for the index, used to secure the index data. |
 | `index_config` | [`IndexConfig`](#indexconfig) | Configuration dictionary specifying the index type (`ivf`, `ivfpq`, or `ivfflat`) and relevant parameters such as `dimension`, `n_lists`, `pq_dim`, and `pq_bits`. |
-| `embedding_model` | `str` | _(Optional)_ Which `sentence-transfomers` model used to auto-generate embeddings. Defaults to `None`, no auto-generation. |
 | `max_cache_size` | `int` | _(Optional)_ Maximum size of local cache to keep for encrypted index. Defaults to `0`. |
 
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 import secrets
 
-index_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-config_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-items_location = cyborgdb.DBConfig(location='postgres', table_name="items", connection_string="host=localhost dbname=postgres")
+index_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+config_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+items_location = cvs.DBConfig(location='postgres', table_name="items", connection_string="host=localhost dbname=postgres")
 
-client = cyborgdb.Client(index_location=index_location, config_location=config_location, items_location=items_location)
+client = cvs.Client(index_location=index_location, config_location=config_location, items_location=items_location)
 
 index_name = "my_index"
 index_key = secrets.token_bytes(32)  # Generate a secure 32-byte encryption key
-index_config = cyborgdb.IndexIVF(dimension=128, n_lists=1024, metric="euclidean")
+index_config = cvs.IndexIVF(dimension=128, n_lists=1024, metric="euclidean")
 
 index = client.create_index(index_name=index_name, index_key=index_key, index_config=index_config)
 ```
 
----
-
-### Load Index
+## Load Index
 
 ```python
 def load_index(self, index_name: str, index_key: bytes, max_cache_size: int = 0)
@@ -143,12 +137,12 @@ Connects to and returns an existing encrypted index for further indexing or quer
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-config_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
+index_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+config_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
 
-client = cyborgdb.Client(index_location=index_location, config_location=config_location)
+client = cvs.Client(index_location=index_location, config_location=config_location)
 
 index_name = "my_index"
 index_key = my_index_key  # Use the same 32-byte encryption key used during index creation
@@ -157,9 +151,7 @@ index_key = my_index_key  # Use the same 32-byte encryption key used during inde
 index = client.load_index(index_name=index_name, index_key=index_key)
 ```
 
----
-
-### List Indexes
+## List Indexes
 
 ```python
 def list_indexes(self)
@@ -170,12 +162,12 @@ Returns a list of encrypted index names which are accessible to the client.
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
-config_location = cyborgdb.DBConfig(location='redis', connection_string="redis://localhost")
+index_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
+config_location = cvs.DBConfig(location='redis', connection_string="redis://localhost")
 
-client = cyborgdb.Client(index_location=index_location, config_location=config_location)
+client = cvs.Client(index_location=index_location, config_location=config_location)
 
 print(client.list_indexes())
 # Example output:
@@ -188,31 +180,27 @@ print(client.list_indexes())
 
 The `EncryptedIndex` class contains all data-related operations for an encrypted index.
 
-### Upsert
+## Upsert
 
 ```python
-def upsert(self, items: List[Dict[str, Any]])
+def upsert(self, vectors: List[Dict[str, Union[int, List[float], bytes, Dict[str, Union[str, int, bool, float]]]]])
 ```
 
-Adds or updates items in the index. Accepts a list of dictionaries, where each dictionary represents a vector with its ID. If an item already exists at `id`, it will be overwritten.
+Adds or updates vector embeddings in the index. Accepts a list of dictionaries, where each dictionary represents a vector with its ID.
 
 **Parameters**:
 | Parameter | Type | Description |
 |-----------|-----------------------------------|-----------------------------------------------------------------------------------------------|
-| `item` | `List[Dict[str, Any]]` | A list of dictionaries, where each dictionary has the format `{"id": str, "vector": List[float], "contents": Union[bytes, str], "metadata": Dict[str, str]}`. |
+| `vectors` | `List[Dict[str, Union[int, List[float], bytes, Dict[str, Union[str, int, bool, float]]]]]` | A list of dictionaries, where each dictionary has the format `{"id": int, "vector": List[float], "item": bytes, "metadata": Dict[]}`. |
 
-- `id` (`str`): Unique string identifier for the item.
-- `vector` (`List[float]`): Embedding vector as a list of floats (_optional_ if index is configured to compute embeddings).
-- `contents` (`bytes`, `str` or `Image`): Item contents (_optional_). Must be a `str` or `Image` if index is configured to compute embeddings.
-- `metadata` (`Dict[str, str]`): Dictionary of key-value metadata pairs associated with the vector (_optional_).
-
-> [!NOTE]
-> If embedding auto-generation is enabled (by setting the `embedding_model` parameter in [`create_index()`](#create-index)), then the `vector` parameter is optional.
-> If `vector` provided, then it will be used (its dimensionality must match that of the `embedding_model`).
-> If `vector` is not provided, a vector embedding will be auto-generated from `contents` using `sentence-transformers`. `contents` must be text in this case.
+- `id` (`int`): Unique integer identifier for the vector.
+- `vector` (`List[float]`): Embedding vector as a list of floats.
+- `item` (`bytes`): Item contents in bytes (_optional_)
+- `metadata` (`dict`): Dictionary of key-value pairs associated with the vector (_optional_)
 
 > [!TIP]
 > For more info on metadata, see [Metadata Filtering](../../guides/3.data-operations/3.3.metadata-filtering.md).
+> Note that metadata filtering will not be available until `v0.9.0`
 
 **Example Usage**:
 
@@ -223,11 +211,12 @@ Adds or updates items in the index. Accepts a list of dictionaries, where each d
 index = client.load_index(index_name=index_name, index_key=index_key)
 
 # Single upsert (wrapped in a list)
-index.upsert([{"id": "item_1", "vector": [0.1, 0.2, 0.3]}])
+index.upsert([{"id": 1, "vector": [0.1, 0.2, 0.3]}])
 
 # Upsert with metadata
+# Note: not available until v0.9.0
 index.upsert([
-  {"id": "item_1",
+  {"id": 1,
    "vector": [0.1, 0.2, 0.3],
    "metadata": {"type": "dog", "temperament": "good boy"}
   }
@@ -235,26 +224,24 @@ index.upsert([
 
 # Batch upsert
 index.upsert([
-    {"id": "item_1", "vector": [0.1, 0.2, 0.3]},
-    {"id": "item_2", "vector": [0.4, 0.5, 0.6]}
+    {"id": 1, "vector": [0.1, 0.2, 0.3]},
+    {"id": 2, "vector": [0.4, 0.5, 0.6]}
 ])
 
 # Upsert with items
 index.upsert([
-    {"id": "item_1", "vector": [0.1, 0.1, 0.1, 0.1], "contents": b'item_contents_here...'}, # Bytes
-    {"id": "item_2", "vector": [0.2, 0.2, 0.2, 0.2], "contents": "item_contents_here..."} # Text
+    {"id": 1, "vector": [0.1, 0.1, 0.1, 0.1], "item": b'item_contents_here...'},
+    {"id": 2, "vector": [0.2, 0.2, 0.2, 0.2], "item": b'item_contents_here...'}
 ])
 ```
 
 > [!TIP]
-> You can pass the `id`, `vector`, `contents` and `metadata` fields as tuples, if you wish to skip the dictionary. On large batches, this can make a signficant difference in memory usage.
+> You can pass the `id` and `vector` fields as tuples, if you wish to skip the dictionary. On big datasets, this can make a signficant difference in memory usage.
 
----
-
-### Train
+## Train
 
 > [!IMPORTANT]
-> This function is only present in the [embedded library](../guides/0.overview/0.1.deployment-models.md) version of CyborgDB.
+> This function is only present in the [embedded library](../guides/0.overview/0.1.deployment-models.md) version of Cyborg Vector Search.
 > In other versions (microservice, serverless), it is automatically called once enough vector embeddings have been indexed.
 
 ```python
@@ -290,21 +277,19 @@ index.train()
 > [!NOTE]
 > There must be at least `2 * n_lists` vector embeddings in the index prior to calling this function.
 
----
+## Query
 
-### Query
-
-#### Single Query
+### Single Query
 
 ```python
 def query(self,
-          query_vector: List[float] = None,
-          query_contents: Union[str, Image] = None,
+          query_vector: List[float],
           top_k: int = 100,
           n_probes: int = 1,
           greedy: bool = False,
-          filters: Dict[str, Any] = None,
-          include: List[str] = ["distances"])
+          filters: Optional[Dict[str, Any]] = None,
+          return_distances: bool = True,
+          return_metadata: bool = False)
 ```
 
 Retrieves the nearest neighbors for a given query vector.
@@ -312,24 +297,23 @@ Retrieves the nearest neighbors for a given query vector.
 **Parameters**:
 | Parameter | Type | Default | Description |
 |-------------------|----------------------------------|--------------|--------------------------------------------------------------------|
-| `query_vector` | `List[float]` | `None` | _(Optional)_ A single query vector as a list of floats. If provided, `query_string` is not needed. |
-| `query_contents` | `str` or `Image` | `None` | _(Optional)_ A single query string or image which will be auto-embedded (if index is set to auto-embed with the appropriate model). If provided, `query_vector` is not needed. |
+| `query_vector` | `List[float]` | - | A single query vector as a list of floats (for single query). |
 | `top_k` | `int` | `100` | _(Optional)_ Number of nearest neighbors to return. |
 | `n_probes` | `int` | `1` | _(Optional)_ Number of lists probed during the query; higher values may increase recall but can also reduce performance. |
 | `greedy` | `bool` | `False` | _(Optional)_ Whether to use greedy search (higher recall with same `n_probes`). |
 | `filters` | `Dict[str, Any]` | `None` | _(Optional)_ A dictionary of filters to apply to vector metadata, limiting search scope to these vectors. |
-| `include` | `List[str]` | `"distances"` | _(Optional)_ List of item fields to return. Can include `distances`, `metadata`, and `vector` (`vector` only for `IVFFlat` indexes). |
+| `return_distances`| `bool` | `True` | _(Optional)_ If `True`, each result includes `distance`. |
+| `return_metadata` | `bool` | `False` | _(Optional)_ If `True`, each result includes `metadata` which contains the decrypted metadata fields, if available. |
 
-> [!NOTE]
-> If embedding auto-generation is enabled (by setting the `embedding_model` parameter in [`create_index()`](#create-index)), then the `query_string` can be used instead of `query_vector`.
-
-> [!NOTE] > `filters` use a subset of the [MongoDB Query and Projection Operators](https://www.mongodb.com/docs/manual/reference/operator/query/).
+> [!NOTE] 
+> `filters` use a subset of the [MongoDB Query and Projection Operators](https://www.mongodb.com/docs/manual/reference/operator/query/).
 > For instance: `filters: { "$and": [ { "label": "cat" }, { "confidence": { "$gte": 0.9 } } ] }` means that only vectors where `label == "cat"` and `confidence >= 0.9` will be considered for encrypted vector search.
+> Note that metadata filtering will not be available until `v0.9.0`
 
 **Returns**:
 | Return Type | Description |
 |----------------------------|---------------------------------------------------------------------------------|
-| `List[Dict[str, Union[str, float, Dict[str, str], List[float]]]]` | List of results for the query vector. Each result is a list of `top_k` dictionaries, each containing `id`, as well as `distance`, `metadata`, and `vector` based on `include`. |
+| `List[Dict[str, Union[int, float, Dict[]]]]` | List of results for the query vector. Each dictionary contains `id` and optionally `distance` if `return_distances` is `True`, and `metadata` if `return_metadata` is `True`. |
 
 **Example Usage**:
 
@@ -343,29 +327,30 @@ index = client.load_index(index_name=index_name, index_key=index_key)
 query_vector = [0.1, 0.2, 0.3]  # Single query vector of dimension 3
 
 # Perform a single query with distances
-results = index.query(query_vector=query_vector, top_k=2, n_probes=5, include=["distances"])
+results = index.query(query_vector=query_vector, top_k=2, n_probes=5, return_distances=True)
 # Example output:
-# [{"id": "101", "distance": 0.05}, {"id": "102", "distance": 0.1}]
+# [{"id": 101, "distance": 0.05}, {"id": 102, "distance": 0.1}]
 ```
 
 _Single Query without Distances_:
 
 ```python
-results = index.query(query_vector=query_vector, top_k=10, n_probes=5, include=[])
+results = index.query(query_vector=query_vector, top_k=10, n_probes=5, return_distances=False)
 # Example output:
-# [{"id": "101"}, {"id": "102"}]
+# [{"id": 101}, {"id": 102}]
 ```
 
 _Single Query with Metadata_:
+_(Not available until `v0.9.0`)_
 
 ```python
-results = index.query(query_vector=query_vector, top_k=10, n_probes=5, filters={"label": "dog"}, include=["metadata"])
+results = index.query(query_vector=query_vector, top_k=10, n_probes=5, filters={"label": "dog"}, return_distances=False, return_metadata=True)
 # Example output:
-# [{"id": "101", "metadata": {"label": "dog", "temperament": "good boy"}},
-#  {"id": "102", "metadata": {"label": "dog", "temperament": "hyper"})]]
+# [{"id": 101, "metadata": {"label": "dog", "temperament": "good boy"}},
+#  {"id": 102, "metadata": {"label": "dog", "temperament": "hyper"})]]
 ```
 
-#### Batched Queries
+### Batched Queries
 
 ```python
 def query(self,
@@ -373,8 +358,7 @@ def query(self,
           top_k: int = 100,
           n_probes: int = 1,
           greedy: bool = False,
-          filters: Dict[str, Any] = None,
-          include: List[str] = ["distances"])
+          return_distances: bool = True)
 ```
 
 Retrieves the nearest neighbors for one or more query vectors.
@@ -386,16 +370,13 @@ Retrieves the nearest neighbors for one or more query vectors.
 | `top_k` | `int` | `100` | _(Optional)_ Number of nearest neighbors to return. |
 | `n_probes` | `int` | `1` | _(Optional)_ Number of lists probed during the query; higher values may increase recall but can also reduce performance. |
 | `greedy` | `bool` | `False` | _(Optional)_ Whether to use greedy search (higher recall with same `n_probes`). |
-| `filters` | `Dict[str, Any]` | `None` | _(Optional)_ A dictionary of filters to apply to vector metadata, limiting search scope to these vectors. |
-| `include` | `List[str]` | `"distance"` | _(Optional)_ List of item fields to return. Can include `distance`, `metadata`, and `vector` (`vector` only for `IVFFlat` indexes). |
-
-> [!NOTE] > `filters` use a subset of the [MongoDB Query and Projection Operators](https://www.mongodb.com/docs/manual/reference/operator/query/).
-> For instance: `filters: { "$and": [ { "label": "cat" }, { "confidence": { "$gte": 0.9 } } ] }` means that only vectors where `label == "cat"` and `confidence >= 0.9` will be considered for encrypted vector search. **Note that this filter will be applied to all queries in the batch.**
+| `return_distances`| `bool` | `True` | _(Optional)_ If `True`, each result includes `(ID, distance)`. If `False`, only IDs are returned. |
+| `return_metadata` | `bool` | `False` | _(Optional)_ If `True`, each result includes `metadata` which contains the decrypted metadata fields, if available. |
 
 **Returns**:
 | Return Type | Description |
 |----------------------------|---------------------------------------------------------------------------------|
-| `List[List[Dict[str, Union[str, float, Dict[str, str], List[float]]]]]` | List of results for each query vector. Each result is a list of `top_k` dictionaries, each containing `id`, as well as `distance`, `metadata`, and `vector` based on `include`. |
+| `List[List[Dict[str, Union[int, float, Dict[]]]]]` | List of results for each query vector. Each result is a list of `top_k` dictionaries, each containing `id` and optionally `distance` if `return_distances` is `True`, and `metadata` if `return_metadata` is `True`. |
 
 **Example Usage**:
 
@@ -414,33 +395,28 @@ query_vectors = np.array([
 results = index.query(query_vectors=query_vectors)
 # Output example:
 # [
-#     [{"id": "item_101", "distance": 0.05}, {"id": "item_202", "distance": 0.1}],
-#     [{"id": "item_202", "distance": 0.2}, {"id": "item_303", "distance": 0.3}]
+#     [{"id": 101, "distance": 0.05}, {"id": 102, "distance": 0.1}],
+#     [{"id": 201, "distance": 0.2}, {"id": 202, "distance": 0.3}]
 # ]
 ```
 
----
-
-### Get
+## Get Item
 
 ```python
-def get(self,
-        ids: List[str],
-        include: List[str] = ["vector", "contents", "metadata"])
+def get_item(self, id: int)
 ```
 
-Retrieves, decrypts and returns items from their IDs. If an item does not exist at that ID, it will return an empty object.
+Retrieves, decrypts and returns an item from its item ID. If an item does not exist at that ID, it will return an empty `bytes` object.
 
 **Parameters**:
-| Parameter | Type | Default | Description |
-|-------------------|----|----------------------------------|--------------|
-| `ids` | `List[str]` | - | Item IDs to retrieve & decrypt |
-| `include` | `List[str]` | `"vector", "contents", "metadata"` | _(Optional)_ List of item fields to return. Can include `vector`, `contents`, and `metadata` (`vector` only for `IVFFlat` indexes). |
+| Parameter | Type | Description |
+|-------------------|----------------------------------|--------------|
+| `id` | `int` | Item ID to retrieve & decrypt |
 
 **Returns**:
 | Return Type | Description |
 |----------------------------|---------------------------------------------------------------------------------|
-| `List[Dict]` | Decrypted item fields for each item, including `id` and specified fields (e.g., `vector`, `contents`, and `metadata`). |
+| `bytes` | Decrypted item bytes, or empty bytes object if no item was found at the ID provided. |
 
 **Example Usage**:
 
@@ -448,37 +424,31 @@ Retrieves, decrypts and returns items from their IDs. If an item does not exist 
 # Load index
 index = client.load_index(index_name=index_name, index_key=index_key)
 
-# Retrieve the items using their IDs
-items = index.get(["item_1", "item_2"])
+# Retrieve the item at ID '0'
+item = index.get_item(0)
 
-print(items)
+print(item)
 # Example output:
-# [{"id": "item_1", "vector": [0.1, 0.2], "contents": "Example contents...", "metadata": {"type": "txt"}},
-#  {"id": "item_2", "vector": [0.3, 0.4], "contents": "Example contents...", "metadata": {"type": "md"}},
-
-# Retrieve only the item contents
-items = index.get(["item_1", "item_2"], include=["contents"])
-print(items)
-# Example output:
-# [{"id": "item_1", "contents": "Example contents..."},
-#  {"id": "item_2", "contents": "Example contents..."}]
+# b'item contents here...'
 ```
 
----
-
-### Delete
+## Get Items
 
 ```python
-def get(self, ids: List[str])
+def get_items(self, ids: List[int])
 ```
 
-Deletes the specified encrypted items stored in the index, including all its associated fields (`vector`, `contents`, `metadata`).
-**Warning**: This action is irreversible.
+Retrieves, decrypts and returns a list of items from their IDs. If an item does not exist at that ID, it will return an empty `bytes` object.
 
 **Parameters**:
 | Parameter | Type | Description |
-|-------------------|--------------------|-----------------------|
-| `ids` | `List[str]` | IDs to delete. |
+|-------------------|----------------------------------|--------------|
+| `ids` | `List[int]` | Item IDs to retrieve & decrypt |
+
+**Returns**:
+| Return Type | Description |
+|----------------------------|---------------------------------------------------------------------------------|
+| `List[bytes]` | List of decrypted item bytes, or empty bytes object if no item was found at the ID provided. |
 
 **Example Usage**:
 
@@ -486,13 +456,22 @@ Deletes the specified encrypted items stored in the index, including all its ass
 # Load index
 index = client.load_index(index_name=index_name, index_key=index_key)
 
-# Delete "item_1" and "item_2"
-index.delete(["item_1", "item_2"])
+# Perform query
+query_vector = [0.1, 0.2, 0.3]
+results = index.query(query_vector=query_vector, top_k=10)
+
+# Extract the item IDs from the query
+result_ids = [res["id"] for res in results]
+
+# Retrieve the items from the query results
+items = index.get_items(result_ids)
+
+print(items)
+# Example output:
+# [b'item #1 contents...', b'item #2 contents...', ...]
 ```
 
----
-
-### Delete Index
+## Delete Index
 
 > [!WARNING]
 > This action is irreversible and will erase all data associated with the index. Use with caution.
@@ -514,8 +493,6 @@ index.delete_index()
 ```
 
 Here’s the **Getter Methods** section, covering each method to retrieve information about the index state.
-
----
 
 ## Getter Methods
 
@@ -544,8 +521,6 @@ else:
     print("The index is not trained; consider calling train().")
 ```
 
----
-
 ### index_name
 
 ```python
@@ -566,8 +541,6 @@ Retrieves the name of the current index.
 print("Current index name:", index.index_name())
 ```
 
----
-
 ### index_type
 
 ```python
@@ -587,8 +560,6 @@ Returns the type of the current index (e.g., `ivf`, `ivfpq`, `ivfflat`).
 # Retrieve the type of index
 print("Index type:", index.index_type())
 ```
-
----
 
 ### index_config
 
@@ -634,18 +605,16 @@ The supported `location` options are:
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_location = cyborgdb.DBConfig(location="redis",
+index_location = cvs.DBConfig(location="redis",
                           connection_string="redis://localhost")
 
-config_location = cyborgdb.DBConfig(location="postgres",
+config_location = cvs.DBConfig(location="postgres",
                            table_name="config_table", connection_string="host=localhost dbname=postgres")
 ```
 
 For more info, you can read about supported backing stores [here](../guides/0.overview/0.2.storage-locations.md).
-
----
 
 ### IndexConfig
 
@@ -662,9 +631,9 @@ Ideal for large-scale datasets where fast retrieval is prioritized over high rec
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_config = cyborgdb.IndexIVF(dimension=128, n_lists=1024, metric="euclidean")
+index_config = cvs.IndexIVF(dimension=128, n_lists=1024, metric="euclidean")
 ```
 
 - **IVFFlat**:
@@ -678,9 +647,9 @@ Suitable for applications requiring high recall with less concern for memory usa
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_config = cyborgdb.IndexIVFFlat(dimension=128, n_lists=1024, metric="euclidean")
+index_config = cvs.IndexIVFFlat(dimension=128, n_lists=1024, metric="euclidean")
 ```
 
 - **IVFPQ** (Inverted File with Product Quantization):
@@ -694,15 +663,10 @@ Product Quantization compresses embeddings, making it suitable for balancing mem
 **Example Usage**:
 
 ```python
-import cyborgdb
+import cyborg_vector_search_py as cvs
 
-index_config = cyborgdb.IndexIVFPQ(dimension=128, n_lists=1024, pq_dim=64, pq_bits=8, metric="euclidean")
+index_config = cvs.IndexIVFPQ(dimension=128, n_lists=1024, pq_dim=64, pq_bits=8, metric="euclidean")
 ```
-
-> [!TIP]
-> If `embedding_model` is defined in `create_index()`, then `dimension` is unncessary in `IndexConfig`.
-
----
 
 ### DistanceMetric
 
@@ -719,7 +683,7 @@ index_config = cyborgdb.IndexIVFPQ(dimension=128, n_lists=1024, pq_dim=64, pq_bi
 ### `Upsert` Secondary Overload: NumPy Array Format
 
 > [!TIP]
-> This format is optimal for large batches due to its memory efficiency and compatibility with batch processing optimizations. It is primarily intended for benchmarking purposes (hence the use of `int` for IDs).
+> This format is optimal for large batches due to its memory efficiency and compatibility with batch processing optimizations.
 
 ```python
 def upsert(self, ids: np.ndarray, vectors: np.ndarray)
