@@ -1,4 +1,4 @@
-# CyborgDB - C++ API
+# Cyborg Vector Search - C++ API
 
 ## Contents
 
@@ -12,8 +12,7 @@
   - [Upsert](#upsert)
   - [Train](#train)
   - [Query](#query)
-  - [Get](#get)
-  - [Delete](#delete)
+  - [Get Items](#get-items)
   - [Delete Index](#delete-index)
 - [Getter Methods](#getter-methods)
 - [Types](#types)
@@ -22,7 +21,7 @@
 
 ## Introduction
 
-The C++ API for CyborgDB is split into two main classes within the `cyborg` namespace:
+The C++ API for Cyborg Vector Search is split into two main classes within the `cyborg` namespace:
 
 - **`Client`** – Handles configuration, index creation/loading, and listing available indexes.
 - **`EncryptedIndex`** – Provides data operations on a specific encrypted index such as upserting vectors, training the index, querying, and retrieving stored items.
@@ -38,21 +37,20 @@ The `cyborg::Client` class manages storage configurations and acts as a factory 
 ### Constructor
 
 ```cpp
-cyborg::Client(const DBConfig& index_location,
-               const DBConfig& config_location,
-               const DBConfig& items_location,
+cyborg::Client(const LocationConfig& index_location,
+               const LocationConfig& config_location,
+               const LocationConfig& items_location,
                const int cpu_threads,
                const bool gpu_accelerate);
 ```
-
 Initializes a new instance of `Client`.
 
 **Parameters**:
 | Parameter | Type | Description |
 |-------------------|-----------------------|------------------------------------------------------|
-| `index_location` | [`DBConfig`](#DBConfig) | Configuration for index storage location. |
-| `config_location` | [`DBConfig`](#DBConfig) | Configuration for index metadata storage. |
-| `items_location` | [`DBConfig`](#DBConfig) | Configuration intended to be used in a future release. Pass in a DBConfig with a Location of 'None'. |
+| `index_location` | [`LocationConfig`](#locationconfig) | Configuration for index storage location. |
+| `config_location` | [`LocationConfig`](#locationconfig) | Configuration for index metadata storage. |
+| `items_location` | [`LocationConfig`](#locationconfig) | Configuration intended to be used in a future release. Pass in a LocationConfig with a Location of 'None'. |
 | `cpu_threads` | `int` | Number of CPU threads to use (e.g., `0` to use all available cores).|
 | `gpu_accelerate` | `bool` | Whether to enable GPU acceleration (requires CUDA).|
 
@@ -61,9 +59,9 @@ Initializes a new instance of `Client`.
 ```cpp
 #include "client.hpp"
 
-cyborg::DBConfig index_location(Location::kMemory);
-cyborg::DBConfig config_location(Location::kRedis, "index_metadata", "redis://localhost");
-cyborg::DBConfig items_location(Location::kNone); // No item storage
+cyborg::LocationConfig index_location(Location::kMemory);
+cyborg::LocationConfig config_location(Location::kRedis, "index_metadata", "redis://localhost");
+cyborg::LocationConfig items_location(Location::kNone); // No item storage
 int cpu_threads = 4;
 bool use_gpu = true;
 
@@ -80,7 +78,7 @@ Creates and returns a new encrypted index based on the provided configuration.
 std::unique_ptr<cyborg::EncryptedIndex> CreateIndex(const std::string index_name,
                                                     const std::array<uint8_t, 32>& index_key,
                                                     const IndexConfig& index_config,
-                                                    const std::optional<size_t>& max_cache_size = 0);
+                                                    const std::optional<size_t>& max_cache_size);
 ```
 
 **Parameters**:
@@ -123,7 +121,7 @@ Loads an existing encrypted index and returns an instance of `EncryptedIndex`.
 ```cpp
 std::unique_ptr<cyborg::EncryptedIndex> LoadIndex(const std::string index_name,
                                                   const std::array<uint8_t, 32>& index_key,
-                                                  const std::optional<size_t>& max_cache_size = 0);
+                                                  const std::optional<size_t>& max_cache_size);
 ```
 
 **Parameters**:
@@ -132,6 +130,7 @@ std::unique_ptr<cyborg::EncryptedIndex> LoadIndex(const std::string index_name,
 | `index_name` | `std::string` | Name of the index to create (must be unique). |
 | `index_key` | `std::array<uint8_t, 32>` | 32-byte encryption key for the index, used to secure index data. |
 | `max_cache_size` | `size_t` | _(Optional)_ Maximum size for the local cache (default is `0`). |
+
 
 **Example Usage**:
 
@@ -143,7 +142,7 @@ auto index = client.LoadIndex("my_index", index_key, std::optional<size_t>{});
 
 ### List Indexes
 
-Returns a list of all encrypted index names accessible via the client at the set `DBConfig`.
+Returns a list of all encrypted index names accessible via the client at the set `LocationConfig`.
 
 ```cpp
 std::vector<std::string> ListIndexes();
@@ -166,53 +165,44 @@ The `cyborg::EncryptedIndex` class contains all data operations for a specific e
 
 ### Upsert
 
-Adds or updates vector embeddings in the index. If an item already exists at `id`, then it will be overwritten.
+Adds or updates vector embeddings in the index.
 
 ```cpp
 void Upsert(Array2D<float>& vectors,
-            const std::vector<std::string> ids,
-            const std::vector<std::vector<uint8_t>> contents = {},
-            const std::vector<std::string> metadata = {});
+            const std::vector<uint64_t> ids,
+            const std::vector<std::vector<uint8_t>> items = {});
 ```
 
 **Parameters**:
 | Parameter | Type | Description |
 |---------------|-----------------------------|-----------------------------------------------------|
 | `vectors` | [`Array2D<float>`](#array2d) | 2D container with vector embeddings to index. |
-| `ids` | `std::vector<std::string>` | Unique identifiers for each vector. |
-| `contents` | `std::vector<std::vector<uint8_t>>` | _(Optional)_ Item contents in bytes. |
-| `metadata` | `std::vector<std::string>` | _(Optional)_ Item metadata in serialized JSON string. |
+| `ids` | `std::vector<uint64_t>` | Unique identifiers for each vector. |
+| `items` | `std::vector<std::vector<uint8_t>>` | _(Optional)_ Item contents in bytes. |
 
 **Exceptions**:
 
 - Throws if vector dimensions are incompatible with the index configuration.
 - Throws if index was not created or loaded yet.
-- Throws if there is a mismatch between the number of `vectors`, `ids`, `items` or `metadata`.
-- Throws if any `metadata` string is not valid JSON.
-
-> [!TIP]
-> For more info on metadata, see [Metadata Filtering](../../guides/3.data-operations/3.3.metadata-filtering.md).
+- Throws if there is a mismatch between the number of `vectors`, `ids` or `items`
 
 **Example Usage**:
 
 ```cpp
 #include "encrypted_index.hpp"
 
-cyborg::Array2D<float> embeddings{{0.1, 0.2, 0.3}, {0.4, 0.5, 0.6}};
-std::vector<std::string> ids = {"item_1", "item_2"};
+// Assume Array2D<float> is properly defined and populated.
+cyborg::Array2D<float> embeddings{/*...*/};
+std::vector<uint64_t> ids = {1, 2, 3};
 
 // Upsert without additional item data
-index->Upsert(ids, embeddings);
+index->Upsert(embeddings, ids);
 
 // Upsert with associated items
 std::vector<std::vector<uint8_t>> items = {
     {'a', 'b', 'c'}, {'d', 'e', 'f'}, {'g', 'h', 'i'}
 };
-index->Upsert(ids, embeddings, items);
-
-// Upsert with metadata
-std::vector<std::string> metadata = {"\"type\": \"image\"", "\"type\": \"text\""}
-index->Upsert(ids, embeddings, items, metadata);
+index->Upsert(embeddings, ids, items);
 ```
 
 ---
@@ -224,8 +214,9 @@ Prior to calling this, all queries will be conducted using encrypted exhaustive 
 After, they will be conducted using encrypted ANN search.
 
 > [!IMPORTANT]
-> This function is only present in the [embedded library](../../guides/0.overview/0.1.deployment-models.md) version of CyborgDB.
+> This function is only present in the [embedded library](../../guides/0.overview/0.1.deployment-models.md) version of Cyborg Vector Search.
 > In other versions (microservice, serverless), it is automatically called once enough vector embeddings have been indexed.
+
 
 ```cpp
 void TrainIndex(const TrainingConfig& training_config = TrainingConfig());
@@ -258,7 +249,6 @@ Retrieves the nearest neighbors for given query vectors.
 QueryResults Query(Array2D<float>& query_vectors,
                    const QueryParams& query_params = QueryParams());
 ```
-
 Retrieves the nearest neighbors for given query vectors.
 
 **Parameters**:
@@ -289,53 +279,29 @@ std::cout << "ID: " << result.ids[j] << ", Distance: " << result.distances[j] <<
 
 ---
 
-### Get
+### Get Items
 
 Retrieves and decrypts items associated with the specified IDs. (For a single item, pass a `std::vector` with one element.)
 
 ```cpp
-std::vector<std::vector<uint8_t>> GetItems(std::vector<std::string> ids,
-                                           std::vector<std::string> include = {"vectors", "contents", "metadatas"});
+std::vector<std::vector<uint8_t>> GetItems(std::vector<uint64_t> ids);
 ```
 
 **Parameters**:
 | Parameter | Type | Description |
 |-------------------|--------------------|-----------------------|
-| `ids` | `std::vector<std::string>` | IDs to retrieve. |
-| `include` | `std::vector<std::string>` | _(Optional)_ List of item fields to return. Can include `vectors`, `contents`, and `metadatas` (`vectors` only for `IVFFlat` indexes). Defaults to include all. |
-
-**Returns**:
-| Type | Description |
-|-----|-----|
-| [`std::vector<cyborg::Item>`](#item) | Decrypted items with requested fields. |
+| `ids` | `std::vector<uint64_t>` | IDs to retrieve. |
 
 **Example Usage**:
 
 ```cpp
-std::vector<std::string> item_ids = {"item_1", "item_2"};
-auto items = index->GetItems(item_ids, {""});
+std::vector<uint64_t> item_ids = {1, 2, 3};
+auto items = index->GetItems(item_ids);
 
 for (const auto& item : items) {
-    // Process each decrypted item (IDs returned by default)
-    std::string id = item.id
+    // Process each decrypted item (as a vector of bytes)
 }
 ```
-
----
-
-### Delete
-
-Deletes the specified encrypted items stored in the index, including all its associated fields (`vector`, `contents`, `metadata`).
-**Warning**: This action is irreversible.
-
-```cpp
-void Delete(std::vector<std::string> ids);
-```
-
-**Parameters**:
-| Parameter | Type | Description |
-|-------------------|--------------------|-----------------------|
-| `ids` | `std::vector<std::string>` | IDs to delete. |
 
 ---
 
@@ -347,6 +313,8 @@ Deletes the current index and all its associated data.
 ```cpp
 void DeleteIndex();
 ```
+
+Deletes the index and its associated data. Proceed with caution.
 
 **Example Usage**:
 
@@ -412,7 +380,7 @@ if (index->is_trained()) {
 
 ### `Location`
 
-The `Location` enum contains the supported index backing store locations for CyborgDB. These are:
+The `Location` enum contains the supported index backing store locations for Cyborg Vector Search. These are:
 
 ```cpp
 enum class Location {
@@ -425,14 +393,15 @@ enum class Location {
 
 ---
 
-### `DBConfig`
+### `LocationConfig`
+_(Equivalent to the Python `DBConfig`)_  
 
-`DBConfig` defines the storage location for various index components.**Constructor**:
+`LocationConfig` defines the storage location for various index components.**Constructor**:
 
 **Constructor**:
 
 ```cpp
-DBConfig(Location location,
+LocationConfig(Location location,
                 const std::optional<std::string>& table_name,
                 const std::optional<std::string>& db_connection_string);
 ```
@@ -444,19 +413,20 @@ DBConfig(Location location,
 | `table_name` | `std::string` | _(Optional)_ Name of the table in the database, if applicable. |
 | `db_connection_string` | `std::string` | _(Optional)_ Connection string for database access, if applicable. |
 
+
 **Example Usage**:
 
 ```cpp
-cyborg::DBConfig index_loc(Location::kRedis, std::nullopt, "redis://localhost");
-cyborg::DBConfig config_loc(Location::kRedis, std::nullopt, "redis://localhost");
-cyborg::DBConfig items_loc(Location::kPostgres, "items", "host=localhost dbname=postgres");
+cyborg::LocationConfig index_loc(Location::kRedis, std::nullopt, "redis://localhost");
+cyborg::LocationConfig config_loc(Location::kRedis, std::nullopt, "redis://localhost");
+cyborg::LocationConfig items_loc(Location::kPostgres, "items", "host=localhost dbname=postgres");
 ```
 
 ---
 
 ### `DistanceMetric`
 
-The `DistanceMetric` enum contains the supported distance metrics for CyborgDB. These are:
+The `DistanceMetric` enum contains the supported distance metrics for Cyborg Vector Search. These are:
 
 ```cpp
 enum class DistanceMetric {
@@ -466,6 +436,7 @@ enum class DistanceMetric {
 ```
 
 ---
+
 
 ### `IndexConfig`
 
@@ -552,7 +523,7 @@ For guidance on how to select the right `n_lists`, `pq_dim` and `pq_bits`, refer
 
 ---
 
-### `Array2D`
+### Array2D
 
 `Array2D` class provides a 2D container for data, which can be initialized with a specific number of rows and columns, or from an existing vector.
 
@@ -623,8 +594,6 @@ TrainingConfig(size_t batch_size = 0,
 | `tolerance` | `double` | _(Optional)_ Convergence tolerance for training. Defaults to `1e-6`. |
 | `max_memory` | `size_t` | _(Optional)_ Maximum memory (MB) usage during training. Defaults to `0`, no limit. |
 
----
-
 ### `QueryParams`
 
 The `QueryParams` struct defines parameters for querying the index, controlling the number of results and probing behavior.
@@ -633,10 +602,7 @@ The `QueryParams` struct defines parameters for querying the index, controlling 
 
 ```cpp
 QueryParams(size_t top_k = 100,
-            size_t n_probes = 1,
-            bool greedy = false,
-            std::string filters = "",
-            std::vector<std::string> include = {"distances"});
+            size_t n_probes = 1);
 ```
 
 **Parameters**:
@@ -644,14 +610,11 @@ QueryParams(size_t top_k = 100,
 |-------------------|----------|--------------------------------------------------------------------------|
 | `top_k` | `size_t` | _(Optional)_ Number of nearest neighbors to return. Defaults to `100`. |
 | `n_probes` | `size_t` | _(Optional)_ Number of lists to probe during query. Defaults to `1`. |
+| `return_items` | `bool` | _(Optional)_ Whether to return item contents along with the IDs. Defaults to `false`. |
+| `return_metadata` | `bool` | _(Optional)_ Whether to return metadata along with the IDs. Defaults to `false`. |
 | `greedy` | `bool` | _(Optional)_ Whether to perform greedy search. Defaults to `false`. |
-| `filters` | `std::string` | _(Optional)_ A JSON string of filters to apply to vector metadata, limiting search scope to these vectors. |
-| `include` | `std::vector<std::string>` | _(Optional)_ List of item fields to return. Can include `distances`, `metadatas`, and `vectors` (`vector` only for `IVFFlat` indexes). Defaults to `"distances"` |
 
 Higher n_probes values may improve recall but could slow down query time, so select a value based on desired recall and performance trade-offs. For guidance on how to select the right `n_probes`, refer to the [query parameter tuning guide](../tuning-guides/query-params.md).
-
-> [!NOTE] > `filters` use a subset of the [MongoDB Query and Projection Operators](https://www.mongodb.com/docs/manual/reference/operator/query/).
-> For instance: `filters: { "$and": [ { "label": "cat" }, { "confidence": { "$gte": 0.9 } } ] }` means that only vectors where `label == "cat"` and `confidence >= 0.9` will be considered for encrypted vector search.
 
 ---
 
@@ -663,10 +626,8 @@ Higher n_probes values may improve recall but could slow down query time, so sel
 | Method | Return Type | Description |
 |--------------------------|------------------------------|------------------------------------------------------|
 | `Result operator[](size_t query_idx)` | `Result` | Returns read-write access to IDs and distances for a specific query. |
-| `const std::vector<std::vector<std::string>>& ids() const` | `std::vector<std::vector<std::string>>&` | Get read-only access to all IDs. |
+| `const Array2D<uint64_t>& ids() const` | `const Array2D<uint64_t>&` | Get read-only access to all IDs. |
 | `const Array2D<float>& distances() const` | `const Array2D<float>&` | Get read-only access to all distances. |
-| `const std::vector<float>& vectors() const` | `const std::vectorfloat>&` | Get read-only access to all vectors. |
-| `const std::vector<std::vector<std::string>>& metadatas() const` | `const std::vector<std::vector<std::string>>&` | Get read-only access to all metadatas. |
 | `size_t num_queries() const` | `size_t` | Returns the number of queries. |
 | `size_t top_k() const` | `size_t` | Returns the number of top-k items per query. |
 | `bool empty() const` | `bool` | Checks if the results are empty. |
@@ -688,17 +649,3 @@ for (size_t i = 0; i < num_queries; ++i) {
 auto all_ids = results.ids();
 auto all_distances = results.distances();
 ```
-
----
-
-### `Item`
-
-`Item` class holds the individual results from a `Get` operation, including the requested fields.
-
-**Access Methods**:
-| Method | Return Type | Description |
-|--------------------------|------------------------------|------------------------------------------------------|
-| `const std::string id() const` | `const std::string` | Get read-only access to all IDs. |
-| `const std::vector<float>& vector() const` | `const std::vector<float>&` | Get read-only access to all distances. |
-| `const std::vector<uint8_t>& contents() const` | `const std::vector<uint8_t>&` | Get read-only access to all vectors. |
-| `const std::string& metadata() const` | `const std::string` | Get read-only access to all metadatas. |
